@@ -285,6 +285,7 @@ export default function App() {
   const [partnerName, setPartnerName] = useState('');
   const [pairCodeInput, setPairCodeInput] = useState('');
   const [posts, setPosts] = useState([]);
+  const [coupleStatuses, setCoupleStatuses] = useState([]);
   const [challenges, setChallenges] = useState([]);
   const [kamaProgress, setKamaProgress] = useState([]);
   const [selectedMoodId, setSelectedMoodId] = useState(local.selectedMoodId || 'love');
@@ -341,6 +342,7 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `couple_id=eq.${couple.id}` }, () => loadPosts(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `couple_id=eq.${couple.id}` }, () => loadChallenges(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kama_progress', filter: `couple_id=eq.${couple.id}` }, () => loadKamaProgress(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_status', filter: `couple_id=eq.${couple.id}` }, () => loadCoupleStatuses(couple.id))
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -366,7 +368,7 @@ export default function App() {
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getSignedUrl(activeCouple.avatar_path) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id)]);
+        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -395,6 +397,52 @@ export default function App() {
 
     const hydrated = await Promise.all((data || []).map(async (post) => ({ ...post, signedUrl: post.image_path ? await getSignedUrl(post.image_path) : null })));
     setPosts(hydrated);
+  }
+
+  async function loadCoupleStatuses(coupleId) {
+    const { data, error } = await supabase
+      .from('couple_status')
+      .select('*')
+      .eq('couple_id', coupleId)
+      .order('updated_at', { ascending: false });
+
+    if (error) return setToast(error.message);
+    setCoupleStatuses(data || []);
+  }
+
+  async function saveMyStatus(next = {}) {
+    if (!couple?.id || !session?.user?.id) return;
+
+    const payload = {
+      couple_id: couple.id,
+      user_id: session.user.id,
+      mood_label: next.moodLabel ?? selectedMood.label,
+      heat: next.heat ?? heat,
+      closeness: next.closeness ?? closeness,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('couple_status')
+      .upsert(payload, { onConflict: 'couple_id,user_id' });
+
+    if (error) setToast(error.message);
+  }
+
+  async function updateHeatValue(value) {
+    setHeat(value);
+    await saveMyStatus({ heat: value });
+  }
+
+  async function updateClosenessValue(value) {
+    setCloseness(value);
+    await saveMyStatus({ closeness: value });
+  }
+
+  async function updateMoodValue(moodId) {
+    const nextMood = moods.find((mood) => mood.id === moodId) || moods[0];
+    setSelectedMoodId(moodId);
+    await saveMyStatus({ moodLabel: nextMood.label });
   }
 
   async function loadChallenges(coupleId) {
@@ -557,6 +605,26 @@ export default function App() {
     }
   }
 
+  async function deletePost(post) {
+    if (!couple?.id || !post?.id) return;
+
+    const confirmed = window.confirm(post.type === 'photo' ? 'Opravdu smazat tuto fotku?' : 'Opravdu smazat tento příspěvek?');
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase.from('posts').delete().eq('id', post.id).eq('couple_id', couple.id);
+      if (error) throw error;
+
+      if (post.image_path) {
+        await supabase.storage.from(STORAGE_BUCKET).remove([post.image_path]);
+      }
+
+      await loadPosts(couple.id);
+    } catch (error) {
+      setToast(`Mazání se nepodařilo: ${error.message}`);
+    }
+  }
+
   async function addChallenge(payload) {
     if (!couple?.id || !payload.title?.trim()) return;
     const { error } = await supabase.from('challenges').insert({ couple_id: couple.id, title: payload.title.trim(), category: payload.category, difficulty: payload.difficulty, xp: Number(payload.xp) || 10, accepted: false, completed: false });
@@ -604,6 +672,7 @@ export default function App() {
     setPosts([]);
     setChallenges([]);
     setKamaProgress([]);
+    setCoupleStatuses([]);
   }
 
   const filteredPosts = useMemo(() => {
@@ -624,6 +693,16 @@ export default function App() {
   const latestPartnerMoodPost = useMemo(
     () => posts.find((post) => post.type === 'mood' && post.author_id && post.author_id !== session?.user?.id) || null,
     [posts, session?.user?.id]
+  );
+
+  const myLiveStatus = useMemo(
+    () => coupleStatuses.find((item) => item.user_id === session?.user?.id) || null,
+    [coupleStatuses, session?.user?.id]
+  );
+
+  const partnerLiveStatus = useMemo(
+    () => coupleStatuses.find((item) => item.user_id && item.user_id !== session?.user?.id) || null,
+    [coupleStatuses, session?.user?.id]
   );
 
   if (!isBackendReady) {
@@ -670,12 +749,14 @@ export default function App() {
               couple={couple}
               latestOwnMoodPost={latestOwnMoodPost}
               latestPartnerMoodPost={latestPartnerMoodPost}
+              myLiveStatus={myLiveStatus}
+              partnerLiveStatus={partnerLiveStatus}
               selectedMood={selectedMood}
-              setSelectedMoodId={setSelectedMoodId}
+              setSelectedMoodId={updateMoodValue}
               heat={heat}
-              setHeat={setHeat}
+              setHeat={updateHeatValue}
               closeness={closeness}
-              setCloseness={setCloseness}
+              setCloseness={updateClosenessValue}
               thought={thought}
               setThought={setThought}
               addPost={addPost}
@@ -685,8 +766,8 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
-          {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
+          {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
+          {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
           {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} stats={challengeStats} />}
           {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
           {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} signOut={signOut} />}
@@ -908,20 +989,20 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
   );
 }
 
-function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName }) {
-  const ownMood = latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
-  const partnerMood = latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
-  const ownHeat = latestOwnMoodPost?.heat ?? heat;
-  const ownCloseness = latestOwnMoodPost?.closeness ?? closeness;
-  const partnerHeat = latestPartnerMoodPost?.heat ?? 0;
-  const partnerCloseness = latestPartnerMoodPost?.closeness ?? 0;
+function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName }) {
+  const ownMood = myLiveStatus?.mood_label ? getMoodByLabel(myLiveStatus.mood_label) : latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
+  const partnerMood = partnerLiveStatus?.mood_label ? getMoodByLabel(partnerLiveStatus.mood_label) : latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
+  const ownHeat = myLiveStatus?.heat ?? heat;
+  const ownCloseness = myLiveStatus?.closeness ?? closeness;
+  const partnerHeat = partnerLiveStatus?.heat ?? 0;
+  const partnerCloseness = partnerLiveStatus?.closeness ?? 0;
 
   return (
     <>
       <section className="grid gap-6 lg:grid-cols-2">
         <PartnerCard
           name={profile?.display_name || 'Já'}
-          status={latestOwnMoodPost ? `Naposledy sdíleno ${formatDate(latestOwnMoodPost.created_at)}` : 'Online'}
+          status={myLiveStatus ? `Teploměr aktualizován ${formatDate(myLiveStatus.updated_at)}` : latestOwnMoodPost ? `Naposledy sdíleno ${formatDate(latestOwnMoodPost.created_at)}` : 'Online'}
           mood={ownMood}
           heat={ownHeat}
           closeness={ownCloseness}
@@ -929,12 +1010,12 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         />
         <PartnerCard
           name={couple ? 'Partner/ka v páru' : 'Čeká na spárování'}
-          status={latestPartnerMoodPost ? `Naposledy sdíleno ${formatDate(latestPartnerMoodPost.created_at)}` : couple ? 'Zatím bez sdílené nálady' : 'Vytvoř nebo zadej párovací kód'}
+          status={partnerLiveStatus ? `Teploměr aktualizován ${formatDate(partnerLiveStatus.updated_at)}` : latestPartnerMoodPost ? `Naposledy sdíleno ${formatDate(latestPartnerMoodPost.created_at)}` : couple ? 'Zatím bez sdíleného teploměru' : 'Vytvoř nebo zadej párovací kód'}
           mood={partnerMood || selectedMood}
           heat={partnerHeat}
           closeness={partnerCloseness}
-          note={latestPartnerMoodPost?.text || (couple ? 'Partner/ka zatím nesdílel/a náladu. Jakmile odešle náladu, graf se tady automaticky aktualizuje.' : 'Pár zatím není propojený.')}
-          waiting={!couple || !latestPartnerMoodPost}
+          note={latestPartnerMoodPost?.text || (couple ? 'Partner/ka zatím neposlal/a text nálady. Teploměr se ale aktualizuje samostatně při změně sliderů.' : 'Pár zatím není propojený.')}
+          waiting={!couple || !partnerLiveStatus}
         />
       </section>
 
@@ -943,7 +1024,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         ownCloseness={ownCloseness}
         partnerHeat={partnerHeat}
         partnerCloseness={partnerCloseness}
-        hasPartnerMood={Boolean(latestPartnerMoodPost)}
+        hasPartnerMood={Boolean(partnerLiveStatus)}
       />
 
       <section className="grid gap-6 xl:grid-cols-3">
@@ -983,10 +1064,10 @@ function RelationshipOverview({ ownHeat, ownCloseness, partnerHeat, partnerClose
         <div>
           <h2 className="text-2xl font-black">Společný vztahový přehled</h2>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">
-            Hodnoty se berou z poslední sdílené nálady každého partnera ve feedu.
+            Hodnoty se aktualizují přímo ze sliderů každého partnera, bez nutnosti posílat náladu do feedu.
           </p>
         </div>
-        {!hasPartnerMood && <div className="rounded-2xl bg-amber-100 px-4 py-3 text-sm font-black text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">Čekám na první náladu partnera/partnerky</div>}
+        {!hasPartnerMood && <div className="rounded-2xl bg-amber-100 px-4 py-3 text-sm font-black text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">Čekám na první změnu teploměru partnera/partnerky</div>}
       </div>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <CompareBar label="Blízkost" leftLabel="Já" rightLabel="Partner/ka" left={ownCloseness} right={partnerCloseness} icon={<Heart size={18} />} />
@@ -1032,12 +1113,12 @@ function StatBar({ label, value, icon }) {
   return <div className="rounded-2xl border border-white/60 bg-white/70 p-4 dark:border-white/10 dark:bg-white/10"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300">{icon}{label}</div><span className="font-black">{value}%</span></div><div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-200/70 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-500" style={{ width: `${value}%` }} /></div></div>;
 }
 
-function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, panicMode, vanishMode, openImage }) {
-  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} openImage={openImage} /></Card>;
+function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, vanishMode, openImage }) {
+  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} openImage={openImage} deletePost={deletePost} /></Card>;
 }
 
-function GalleryPanel({ posts, addPhoto, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, vanishMode, openImage }) {
-  return <Card><div className="mb-5"><h2 className="text-3xl font-black">Private Gallery</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Fotky jsou uložené v privátním Supabase Storage bucketu a cesty jsou oddělené podle ID vašeho páru.</p></div><div className="mb-5 flex flex-wrap gap-2">{photoCategories.map((category) => <PillButton key={category.id} active={photoCategory === category.id} onClick={() => setPhotoCategory(category.id)}>{category.label}</PillButton>)}<select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option></select></div><GalleryUploadForm addPhoto={addPhoto} /><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} galleryOnly openImage={openImage} /></Card>;
+function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, vanishMode, openImage }) {
+  return <Card><div className="mb-5"><h2 className="text-3xl font-black">Private Gallery</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Fotky jsou uložené v privátním Supabase Storage bucketu a cesty jsou oddělené podle ID vašeho páru.</p></div><div className="mb-5 flex flex-wrap gap-2">{photoCategories.map((category) => <PillButton key={category.id} active={photoCategory === category.id} onClick={() => setPhotoCategory(category.id)}>{category.label}</PillButton>)}<select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option></select></div><GalleryUploadForm addPhoto={addPhoto} /><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} galleryOnly openImage={openImage} deletePost={deletePost} /></Card>;
 }
 
 function GalleryUploadForm({ addPhoto }) {
@@ -1051,14 +1132,64 @@ function PhotoUploadButton({ addPhoto }) {
   return <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600"><input type="file" accept="image/*" className="hidden" onChange={(event) => addPhoto(event.target.files?.[0])} /><Plus size={18} /> Přidat fotku</label>;
 }
 
-function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage }) {
+function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage, deletePost }) {
   if (posts.length === 0) return <EmptyState title="Zatím tu nic není" text={galleryOnly ? 'Nahrajte první společnou fotku.' : 'Pošlete první zprávu, náladu nebo fotku.'} icon={galleryOnly ? Image : MessageCircle} />;
-  return <div className="max-h-[650px] space-y-4 overflow-auto pr-1">{posts.map((post) => <article key={post.id} className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-rose-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5"><div className="flex items-center justify-between gap-4"><div className="font-black">{post.type === 'photo' ? 'Fotka' : post.type === 'mood' ? 'Nálada' : 'Zpráva'}</div><div className="text-sm text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div></div><p className="mt-3 text-lg">{post.text}</p>{post.mood_label && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nálada: {post.mood_label}</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Blízkost: {post.closeness}%</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nadrženost: {post.heat}%</div></div>}{post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} />}</article>)}</div>;
+  return (
+    <div className={galleryOnly ? 'grid max-h-[760px] grid-cols-2 gap-4 overflow-auto pr-1' : 'max-h-[650px] space-y-4 overflow-auto pr-1'}>
+      {posts.map((post) => (
+        <article
+          key={post.id}
+          className={galleryOnly ? 'overflow-hidden rounded-3xl border border-pink-100 bg-white shadow-xl dark:border-white/10 dark:bg-white/10' : 'rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-rose-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5'}
+        >
+          {galleryOnly ? (
+            <>
+              <MediaCard imageUrl={post.signedUrl} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} compact />
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black">{post.photo_category || 'photo'}</div>
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => deletePost?.(post)}
+                    className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white"
+                  >
+                    Smazat
+                  </button>
+                </div>
+                <p className="mt-3 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{post.text}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <div className="font-black">{post.type === 'photo' ? 'Fotka' : post.type === 'mood' ? 'Nálada' : 'Zpráva'}</div>
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
+                  <button
+                    type="button"
+                    onClick={() => deletePost?.(post)}
+                    className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white"
+                  >
+                    Smazat
+                  </button>
+                </div>
+              </div>
+              <p className="mt-3 text-lg">{post.text}</p>
+              {post.mood_label && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nálada: {post.mood_label}</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Blízkost: {post.closeness}%</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nadrženost: {post.heat}%</div></div>}
+              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} />}
+            </>
+          )}
+        </article>
+      ))}
+    </div>
+  );
 }
 
-function MediaCard({ blurred, expiresIn, category, imageUrl, openImage }) {
+function MediaCard({ blurred, expiresIn, category, imageUrl, openImage, compact = false }) {
   return (
-    <div className="relative mt-4 h-72 overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-br from-rose-500 via-fuchsia-500 to-purple-700">
+    <div className={`relative overflow-hidden border border-white/20 bg-gradient-to-br from-rose-500 via-fuchsia-500 to-purple-700 ${compact ? 'h-56 rounded-none md:h-72' : 'mt-4 h-72 rounded-3xl'}`}>
       {imageUrl ? (
         <button
           type="button"
