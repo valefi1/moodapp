@@ -1379,7 +1379,47 @@ function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePo
 }
 
 function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, vanishMode, openImage }) {
-  return <Card><div className="mb-5"><h2 className="text-3xl font-black">Private Gallery</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Fotky jsou uložené v privátním Supabase Storage bucketu a cesty jsou oddělené podle ID vašeho páru.</p></div><div className="mb-5 flex min-w-0 flex-wrap gap-2"}]}‍畏_RESULT cordless  malformed? Wait tool call: bad? Need actual to=canmore.update_textdoc. I did. But response not shown? It gave weird? Let's continue? Need final maybe mention canvas updated. Need maybe patch failed? I see malformed >{photoCategories.map((category) => <PillButton key={category.id} active={photoCategory === category.id} onClick={() => setPhotoCategory(category.id)}>{category.label}</PillButton>)}<select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option></select></div><GalleryUploadForm addPhoto={addPhoto} /><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} galleryOnly openImage={openImage} deletePost={deletePost} /></Card>;
+  return (
+    <Card>
+      <div className="mb-5">
+        <h2 className="text-3xl font-black">Private Gallery</h2>
+        <p className="mt-1 text-gray-500 dark:text-gray-300">
+          Fotky jsou uložené v privátním Supabase Storage bucketu a cesty jsou oddělené podle ID vašeho páru.
+        </p>
+      </div>
+
+      <div className="mb-5 flex min-w-0 flex-wrap gap-2">
+        {photoCategories.map((category) => (
+          <PillButton
+            key={category.id}
+            active={photoCategory === category.id}
+            onClick={() => setPhotoCategory(category.id)}
+          >
+            {category.label}
+          </PillButton>
+        ))}
+
+        <select
+          value={sortOrder}
+          onChange={(event) => setSortOrder(event.target.value)}
+          className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"
+        >
+          <option value="newest">Nejnovější</option>
+          <option value="oldest">Nejstarší</option>
+        </select>
+      </div>
+
+      <GalleryUploadForm addPhoto={addPhoto} />
+      <FeedList
+        posts={posts}
+        panicMode={panicMode}
+        vanishMode={vanishMode}
+        galleryOnly
+        openImage={openImage}
+        deletePost={deletePost}
+      />
+    </Card>
+  );
 }
 
 function GalleryUploadForm({ addPhoto }) {
