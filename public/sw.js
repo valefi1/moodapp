@@ -1,22 +1,22 @@
-self.addEventListener('push', (event) => {
-  const data = event.data?.json() || {};
+self.addEventListener("push", (event) => {
+  const data = event.data.json();
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'MoodSync', {
-      body: data.body || 'Máš nové upozornení.',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       data: {
-        url: data.url || '/',
+        url: data.url || "/",
       },
     })
   );
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   event.waitUntil(
-    clients.openWindow(event.notification.data?.url || '/')
+    clients.openWindow(event.notification.data.url || "/")
   );
 });

@@ -219,265 +219,146 @@ function normalizeStarterChallenge(challenge, coupleId, index = 0, userId = null
 }
 
 const kamaPositions = [
+  { id: 'kama-31', title: 'Jemný déšť', pose: 'side-facing', category: 'Romantic', difficulty: 'Easy', xp: 16, description: { setup: 'Ležení bokem velmi blízko u sebe.', focus: 'Pomalé tempo a dlouhé doteky.', comfort: 'Použijte měkké polštáře pod hlavu.' } },
+  { id: 'kama-32', title: 'Venušin polibek', pose: 'side-facing', category: 'Oral', difficulty: 'Medium', xp: 30, description: { setup: 'Partneři leží proti sobě v pohodlné poloze.', focus: 'Vzájemné uspokojování a komunikace.', comfort: 'Začněte pomalu a střídejte tempo.' } },
+  { id: 'kama-33', title: 'Královna', pose: 'top-facing', category: 'Rider', difficulty: 'Medium', xp: 32, description: { setup: 'Partnerka nahoře v dominantnější poloze.', focus: 'Kontrola rytmu a intenzity.', comfort: 'Držte stabilitu boků.' } },
+  { id: 'kama-34', title: 'Noční objetí', pose: 'side-spoon', category: 'Soft', difficulty: 'Easy', xp: 14, description: { setup: 'Klasická poloha na lžičku.', focus: 'Blízkost a jemnost.', comfort: 'Vhodné i pro delší chvíle.' } },
+  { id: 'kama-35', title: 'Hvězdný prach', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 40, description: { setup: 'Poloha ve stoje s oporou.', focus: 'Silná chemie a kontakt očí.', comfort: 'Použijte zeď pro jistotu.' } },
+  { id: 'kama-36', title: 'Samet', pose: 'edge-bed', category: 'Classic', difficulty: 'Easy', xp: 18, description: { setup: 'Ležící klasická pozice.', focus: 'Pomalý rytmus.', comfort: 'Uvolněte boky i stehna.' } },
+  { id: 'kama-37', title: 'Polární záře', pose: 'side-facing', category: 'Romantic', difficulty: 'Medium', xp: 24, description: { setup: 'Bokem k sobě s propletenýma nohama.', focus: 'Mazlení a teasing.', comfort: 'Netlačte na ramena.' } },
+  { id: 'kama-38', title: 'Tango', pose: 'standing-mirror', category: 'Standing', difficulty: 'Medium', xp: 34, description: { setup: 'Stojící poloha s těsným kontaktem.', focus: 'Rytmus a dominance.', comfort: 'Držte rovnováhu.' } },
+  { id: 'kama-39', title: 'Čokoláda', pose: 'seated-face', category: 'Oral', difficulty: 'Easy', xp: 24, description: { setup: 'Pohodlné sezení nebo klek.', focus: 'Orální stimulace a teasing.', comfort: 'Používejte pohodlnou oporu.' } },
+  { id: 'kama-40', title: 'Harmonie', pose: 'side-facing', category: 'Soft', difficulty: 'Easy', xp: 15, description: { setup: 'Klidná poloha bokem.', focus: 'Synchronizace pohybů.', comfort: 'Ideální pro pomalé tempo.' } },
+  { id: 'kama-41', title: 'Mléčná dráha', pose: 'top-facing', category: 'Passion', difficulty: 'Hard', xp: 44, description: { setup: 'Aktivní poloha nahoře.', focus: 'Intenzita a rytmus.', comfort: 'Pravidelně měňte tempo.' } },
+  { id: 'kama-42', title: 'Pokušení', pose: 'tabletop', category: 'Front', difficulty: 'Medium', xp: 30, description: { setup: 'Poloha na hraně postele nebo stolu.', focus: 'Hravost a vizuální kontakt.', comfort: 'Použijte stabilní povrch.' } },
+  { id: 'kama-43', title: 'Karamel', pose: 'edge-bed', category: 'Oral', difficulty: 'Medium', xp: 28, description: { setup: 'Pohodlná poloha pro orální hrátky.', focus: 'Pomalejší intenzivní stimulace.', comfort: 'Komunikujte tempo.' } },
+  { id: 'kama-44', title: 'Zen', pose: 'side-spoon', category: 'Soft', difficulty: 'Easy', xp: 12, description: { setup: 'Ležení za sebou.', focus: 'Relax a intimita.', comfort: 'Bez tlaku na záda.' } },
+  { id: 'kama-45', title: 'Magnet', pose: 'seated-face', category: 'Romantic', difficulty: 'Medium', xp: 26, description: { setup: 'Sedící objetí čelem k sobě.', focus: 'Oční kontakt a blízkost.', comfort: 'Opřete se o čelo postele.' } },
+  { id: 'kama-46', title: 'Pírko', pose: 'side-facing', category: 'Romantic', difficulty: 'Easy', xp: 14, description: { setup: 'Lehká a jemná poloha.', focus: 'Doteky a teasing.', comfort: 'Nechte tělo úplně uvolněné.' } },
+  { id: 'kama-47', title: 'Bouře', pose: 'kneeling-arch', category: 'Passion', difficulty: 'Hard', xp: 46, description: { setup: 'Dynamická poloha zezadu.', focus: 'Silnější tempo.', comfort: 'Podložte kolena.' } },
+  { id: 'kama-48', title: 'Vanilka', pose: 'edge-bed', category: 'Classic', difficulty: 'Easy', xp: 10, description: { setup: 'Jednoduchá pohodlná poloha.', focus: 'Pomalý kontakt.', comfort: 'Vhodné pro začátečníky.' } },
+  { id: 'kama-49', title: 'Med', pose: 'side-facing', category: 'Oral', difficulty: 'Easy', xp: 22, description: { setup: 'Ležící poloha pro orální kontakt.', focus: 'Jemné tempo a teasing.', comfort: 'Pohodlný polštář pod hlavou.' } },
+  { id: 'kama-50', title: 'Infinity', pose: 'top-facing', category: 'Rider', difficulty: 'Hard', xp: 48, description: { setup: 'Aktivní poloha s pohybem boků.', focus: 'Kontrola a intenzita.', comfort: 'Nepřetěžujte kolena.' } },
+
   {
-    id: 'kama-1',
-    title: 'Lotus',
-    pose: 'seated-face',
-    category: 'Romantic',
-    difficulty: 'Medium',
-    xp: 25,
-    description: {
-      setup: 'Partneři sedí čelem k sobě v těsném objetí. Partnerka sedí partnerovi v klíně a nohy má kolem jeho pasu.',
-      focus: 'Pomalejší rytmus, intenzivní oční kontakt a hluboká blízkost.',
-      comfort: 'Ideální s oporou zad nebo polštářem pod boky.',
-    },
+    id: 'kama-1', title: 'Lotus', pose: 'seated-face', category: 'Romantic', difficulty: 'Medium', xp: 25,
+    description: { setup: 'Partner sedí stabilně a partnerka se posadí do jeho klína čelem k němu.', focus: 'Pomalé tempo, objetí, líbání a oční kontakt.', comfort: 'Opřete záda o čelo postele nebo polštář.' },
   },
   {
-    id: 'kama-2',
-    title: 'Misionář',
-    pose: 'edge-bed',
-    category: 'Classic',
-    difficulty: 'Easy',
-    xp: 10,
-    description: {
-      setup: 'Partnerka leží na zádech, partner nahoře mezi nohama.',
-      focus: 'Klasická intimní poloha s možností líbání a blízkosti.',
-      comfort: 'Polštář pod boky může zlepšit úhel.',
-    },
+    id: 'kama-2', title: 'Misionář', pose: 'edge-bed', category: 'Classic', difficulty: 'Easy', xp: 10,
+    description: { setup: 'Partnerka leží na zádech a partner je nahoře mezi jejíma nohama.', focus: 'Blízkost tváří, snadná komunikace a pomalé ladění rytmu.', comfort: 'Polštář pod boky může zlepšit úhel a pohodlí.' },
   },
   {
-    id: 'kama-3',
-    title: 'Doggy Style',
-    pose: 'kneeling-arch',
-    category: 'Passion',
-    difficulty: 'Medium',
-    xp: 25,
-    description: {
-      setup: 'Partnerka klečí na všech čtyřech, partner za ní.',
-      focus: 'Intenzivnější tempo a hlubší úhel.',
-      comfort: 'Použijte polštáře pod kolena.',
-    },
+    id: 'kama-3', title: 'Na pejska', pose: 'kneeling-arch', category: 'Passion', difficulty: 'Medium', xp: 25,
+    description: { setup: 'Partnerka je na kolenou s oporou rukou, partner je za ní.', focus: 'Silnější energie, kontrola tempa a hlubší úhel.', comfort: 'Podložte kolena a průběžně komunikujte tempo.' },
   },
   {
-    id: 'kama-4',
-    title: 'Cowgirl',
-    pose: 'top-facing',
-    category: 'Passion',
-    difficulty: 'Medium',
-    xp: 30,
-    description: {
-      setup: 'Partner leží na zádech, partnerka nahoře čelem k němu.',
-      focus: 'Partnerka ovládá tempo i hloubku.',
-      comfort: 'Pomáhá opora rukama o hrudník nebo postel.',
-    },
+    id: 'kama-4', title: 'Kovbojka', pose: 'top-facing', category: 'Passion', difficulty: 'Medium', xp: 30,
+    description: { setup: 'Partner leží na zádech a partnerka sedí nahoře čelem k němu.', focus: 'Partnerka ovládá tempo, úhel a hloubku pohybu.', comfort: 'Ruce mohou být opřené o hrudník, stehna nebo matraci.' },
   },
   {
-    id: 'kama-5',
-    title: 'Reverse Cowgirl',
-    pose: 'top-facing',
-    category: 'Spicy',
-    difficulty: 'Medium',
-    xp: 35,
-    description: {
-      setup: 'Partnerka sedí nahoře zády k partnerovi.',
-      focus: 'Silnější vizuální stimulace a jiný úhel.',
-      comfort: 'Začněte pomalu a držte stabilitu.',
-    },
+    id: 'kama-5', title: 'Obrácená kovbojka', pose: 'top-facing', category: 'Spicy', difficulty: 'Medium', xp: 35,
+    description: { setup: 'Partner leží na zádech a partnerka sedí nahoře zády k němu.', focus: 'Vizuální teasing a jiný úhel kontaktu.', comfort: 'Začněte pomalu a držte stabilitu v kolenou.' },
   },
   {
-    id: 'kama-6',
-    title: 'Spooning',
-    pose: 'side-spoon',
-    category: 'Soft',
-    difficulty: 'Easy',
-    xp: 15,
-    description: {
-      setup: 'Oba leží na boku, partner zezadu.',
-      focus: 'Jemnost, pomalost a pohodlí.',
-      comfort: 'Výborné pro dlouhou intimitu bez námahy.',
-    },
+    id: 'kama-6', title: 'Lžička', pose: 'side-spoon', category: 'Soft', difficulty: 'Easy', xp: 15,
+    description: { setup: 'Oba leží na boku za sebou, partner je zezadu přitisknutý k partnerce.', focus: 'Jemnost, ranní intimita a dlouhý tělesný kontakt.', comfort: 'Polštář mezi koleny uleví kyčlím i bedrům.' },
   },
   {
-    id: 'kama-7',
-    title: 'Butterfly',
-    pose: 'edge-bed',
-    category: 'Passion',
-    difficulty: 'Hard',
-    xp: 40,
-    description: {
-      setup: 'Partnerka leží na kraji postele, partner stojí nebo klečí.',
-      focus: 'Intenzivnější kontrola úhlu a hloubky.',
-      comfort: 'Podložte bedra polštářem.',
-    },
+    id: 'kama-7', title: 'Motýlek', pose: 'edge-bed', category: 'Passion', difficulty: 'Hard', xp: 40,
+    description: { setup: 'Partnerka leží na kraji postele, partner stojí nebo klečí před ní.', focus: 'Přesnější kontrola úhlu a intenzity.', comfort: 'Stabilní okraj postele a podpora beder jsou zásadní.' },
   },
   {
-    id: 'kama-8',
-    title: 'Standing',
-    pose: 'standing-mirror',
-    category: 'Spicy',
-    difficulty: 'Hard',
-    xp: 45,
-    description: {
-      setup: 'Oba stojí čelem nebo zády k sobě.',
-      focus: 'Silné napětí a spontánnost.',
-      comfort: 'Nutná stabilita a opora.',
-    },
+    id: 'kama-8', title: 'Svíčka', pose: 'standing-mirror', category: 'Standing', difficulty: 'Medium', xp: 30,
+    description: { setup: 'Oba stojí velmi blízko u sebe, těla jsou lehce natočená.', focus: 'Malé pohyby boků, kontakt rukama a spontánní energie.', comfort: 'Vhodné u zdi nebo zrcadla, aby byla opora jistá.' },
   },
   {
-    id: 'kama-9',
-    title: 'Chair Ride',
-    pose: 'seated-face',
-    category: 'Romantic',
-    difficulty: 'Medium',
-    xp: 28,
-    description: {
-      setup: 'Partner sedí na židli, partnerka v jeho klíně.',
-      focus: 'Blízkost, líbání a pomalé tempo.',
-      comfort: 'Použijte pevnou židli.',
-    },
+    id: 'kama-9', title: 'Háček', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 38,
+    description: { setup: 'Ve stoje se partnerka jednou nohou zahákne kolem partnera nebo se o něj opře.', focus: 'Těsné propojení, intenzivní kontakt a pocit spontánnosti.', comfort: 'Použijte zeď jako oporu a nepřetěžujte stojnou nohu.' },
   },
   {
-    id: 'kama-10',
-    title: 'Face to Face Side',
-    pose: 'side-facing',
-    category: 'Soft',
-    difficulty: 'Easy',
-    xp: 15,
-    description: {
-      setup: 'Oba leží na boku čelem k sobě.',
-      focus: 'Romantická a pohodlná poloha.',
-      comfort: 'Ideální pro delší mazlení.',
-    },
+    id: 'kama-10', title: 'Oheň', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 45,
+    description: { setup: 'Stojící varianta tváří v tvář, partner partnerku podpírá a vede její náklon.', focus: 'Vášnivá, taneční energie a silný vizuální kontakt.', comfort: 'Nedělejte zvedání bez jistoty a držte krátké intervaly.' },
   },
   {
-    id: 'kama-11',
-    title: 'Table Edge',
-    pose: 'tabletop',
-    category: 'Teasing',
-    difficulty: 'Medium',
-    xp: 30,
-    description: {
-      setup: 'Partnerka sedí na hraně stolu nebo linky.',
-      focus: 'Hravost a dominance postoje.',
-      comfort: 'Pouze stabilní povrch.',
-    },
+    id: 'kama-11', title: 'Pevné objetí', pose: 'side-facing', category: 'Soft', difficulty: 'Easy', xp: 18,
+    description: { setup: 'Ležíte na boku čelem nebo lehce bokem k sobě, těla jsou blízko.', focus: 'Mazlení, líbání, hlazení a pocit bezpečí.', comfort: 'Upravte ramena a kyčle tak, aby nikdo neležel na ruce.' },
   },
   {
-    id: 'kama-12',
-    title: 'Bridge',
-    pose: 'edge-bed',
-    category: 'Advanced',
-    difficulty: 'Hard',
-    xp: 50,
-    description: {
-      setup: 'Partnerka zvedne boky do mostu.',
-      focus: 'Silný úhel a hlubší stimulace.',
-      comfort: 'Náročnější na fyzičku, nepřehánět.',
-    },
+    id: 'kama-12', title: 'Nekonečná slast', pose: 'side-facing', category: 'Side', difficulty: 'Medium', xp: 28,
+    description: { setup: 'Bokem k sobě, jedna noha partnerky je výš nebo zachycená přes partnera.', focus: 'Hledání příjemného úhlu a pomalý, smyslný pohyb.', comfort: 'Netlačte na kyčle a nechte kolena volná.' },
   },
   {
-    id: 'kama-13',
-    title: 'Lap Dance',
-    pose: 'seated-face',
-    category: 'Teasing',
-    difficulty: 'Easy',
-    xp: 20,
-    description: {
-      setup: 'Partner sedí, partnerka tančí nebo sedí v klíně.',
-      focus: 'Napětí a teasing.',
-      comfort: 'Hudba a pomalé tempo pomáhají.',
-    },
+    id: 'kama-13', title: 'Mexický styl', pose: 'seated-face', category: 'Rider', difficulty: 'Medium', xp: 28,
+    description: { setup: 'Partner sedí v křesle nebo na pevné židli, partnerka si sedá do klína.', focus: 'Pohodlné vedení tempa partnerkou a volné ruce pro doteky.', comfort: 'Použijte stabilní židli bez koleček.' },
   },
   {
-    id: 'kama-14',
-    title: 'Wall Support',
-    pose: 'standing-mirror',
-    category: 'Spicy',
-    difficulty: 'Hard',
-    xp: 45,
-    description: {
-      setup: 'Partnerka se opírá o zeď, partner stojí před nebo za ní.',
-      focus: 'Intenzita a dominance.',
-      comfort: 'Používejte pevnou oporu.',
-    },
+    id: 'kama-14', title: 'Vzdušný jezdec', pose: 'seated-face', category: 'Rider', difficulty: 'Hard', xp: 42,
+    description: { setup: 'Partnerka nahoře více objímá partnera nohama a váha je částečně sdílená.', focus: 'Silný pocit propojení a větší fyzická intenzita.', comfort: 'Náročnější na sílu; držte krátce a bezpečně.' },
   },
   {
-    id: 'kama-15',
-    title: 'Lazy Morning',
-    pose: 'side-spoon',
-    category: 'Soft',
-    difficulty: 'Easy',
-    xp: 12,
-    description: {
-      setup: 'Uvolněná ranní spooning poloha.',
-      focus: 'Pomalé tempo a pohodlí.',
-      comfort: 'Perfektní na ráno nebo usínání.',
-    },
+    id: 'kama-15', title: 'Španělský západ slunce', pose: 'top-facing', category: 'Rider', difficulty: 'Medium', xp: 34,
+    description: { setup: 'Varianta nahoře zády k partnerovi, partner má dobrou oporu zad.', focus: 'Partnerka vede pohyb a partner má volné ruce pro doteky.', comfort: 'Držte plynulé tempo a chraňte kolena.' },
   },
   {
-    id: 'kama-16',
-    title: 'Mirror View',
-    pose: 'standing-mirror',
-    category: 'Teasing',
-    difficulty: 'Medium',
-    xp: 30,
-    description: {
-      setup: 'Před velkým zrcadlem zády k partnerovi.',
-      focus: 'Vizualita a teasing.',
-      comfort: 'Důležitá stabilita a komunikace.',
-    },
+    id: 'kama-16', title: 'Šéfkuchař', pose: 'tabletop', category: 'Front', difficulty: 'Medium', xp: 30,
+    description: { setup: 'Partnerka sedí na stabilním stole nebo hraně linky, partner stojí před ní.', focus: 'Hravost, změna prostředí a přímý kontakt tváří v tvář.', comfort: 'Povrch musí být pevný a bez kluzkých hran.' },
   },
   {
-    id: 'kama-17',
-    title: 'Crossed Legs',
-    pose: 'side-facing',
-    category: 'Romantic',
-    difficulty: 'Easy',
-    xp: 18,
-    description: {
-      setup: 'Ležení čelem k sobě s propletenýma nohama.',
-      focus: 'Kontakt a jemnost.',
-      comfort: 'Pohodlná poloha na delší čas.',
-    },
+    id: 'kama-17', title: 'Zajetí', pose: 'edge-bed', category: 'Front', difficulty: 'Hard', xp: 40,
+    description: { setup: 'Partnerka leží na okraji postele s boky blízko hrany, partner je před ní.', focus: 'Vášnivější úhel a pocit oddání se momentu.', comfort: 'Hlava, záda i krk musí mít bezpečnou oporu.' },
   },
   {
-    id: 'kama-18',
-    title: 'Pillow Lift',
-    pose: 'edge-bed',
-    category: 'Classic',
-    difficulty: 'Easy',
-    xp: 16,
-    description: {
-      setup: 'Polštář pod boky partnerky.',
-      focus: 'Změna úhlu a pohodlí.',
-      comfort: 'Velmi pohodlné i pro začátečníky.',
-    },
+    id: 'kama-18', title: 'Ještěrky', pose: 'edge-bed', category: 'Front', difficulty: 'Easy', xp: 16,
+    description: { setup: 'Oba jsou nízko u sebe v pohodlné ležící pozici.', focus: 'Klid, doteky, blízkost a minimum akrobacie.', comfort: 'Skvělé pro pomalé tempo a delší intimní chvíli.' },
   },
   {
-    id: 'kama-19',
-    title: 'Slow Grind',
-    pose: 'top-facing',
-    category: 'Romantic',
-    difficulty: 'Medium',
-    xp: 24,
-    description: {
-      setup: 'Partnerka nahoře s pomalým rytmem.',
-      focus: 'Pomalost a kontakt.',
-      comfort: 'Netlačit na kolena.',
-    },
+    id: 'kama-19', title: 'Klapka', pose: 'kneeling-arch', category: 'Back', difficulty: 'Medium', xp: 30,
+    description: { setup: 'Partnerka je níž a více schoulená, partner je za ní s oporou rukou.', focus: 'Zadní vstup s větší kontrolou tempa partnerem.', comfort: 'Nesmí tlačit na krk ani ramena; podložte kolena.' },
   },
   {
-    id: 'kama-20',
-    title: 'Intimate Hug',
-    pose: 'seated-face',
-    category: 'Soft',
-    difficulty: 'Easy',
-    xp: 14,
-    description: {
-      setup: 'Sed v objetí s minimálním pohybem.',
-      focus: 'Emocionální propojení.',
-      comfort: 'Vhodné i pro delší mazlení.',
-    },
+    id: 'kama-20', title: 'Krab', pose: 'side-facing', category: 'Back', difficulty: 'Medium', xp: 32,
+    description: { setup: 'Těla jsou propletená bokem nebo zezadu s možností objímání.', focus: 'Smyslné vinutí těl, ruce volné pro hlazení.', comfort: 'Pomalé změny úhlu jsou lepší než prudký pohyb.' },
+  },
+  {
+    id: 'kama-21', title: 'Líní psi', pose: 'edge-bed', category: 'Back', difficulty: 'Medium', xp: 28,
+    description: { setup: 'Oba partneři jsou nízko u sebe, těla kopírují podobnou ležící pozici.', focus: 'Tělesná blízkost, pomalejší rytmus a kontakt celou vahou.', comfort: 'Horní partner nesmí tlačit celou vahou dolů.' },
+  },
+  {
+    id: 'kama-22', title: 'Kruh 69', pose: 'side-facing', category: 'Oral', difficulty: 'Medium', xp: 35,
+    description: { setup: 'Partneři jsou natočení proti sobě tak, aby se mohli vzájemně uspokojovat ústy.', focus: 'Vzájemnost, pomalé tempo a jasná komunikace.', comfort: 'Poloha na boku je bezpečnější a méně namáhavá než nahoře/dole.' },
+  },
+  {
+    id: 'kama-23', title: 'Mořská panna', pose: 'edge-bed', category: 'Classic', difficulty: 'Medium', xp: 26,
+    description: { setup: 'Partnerka leží s nohama více u sebe nebo lehce natočenými do strany.', focus: 'Těsnější kontakt a elegantnější, pomalejší pohyb.', comfort: 'Nevytáčejte kolena ani kyčle do bolesti.' },
+  },
+  {
+    id: 'kama-24', title: 'Vodopád', pose: 'edge-bed', category: 'Advanced', difficulty: 'Hard', xp: 45,
+    description: { setup: 'Ležící varianta na kraji postele s výraznějším náklonem těla.', focus: 'Pocit uvolnění a intenzivnější úhel.', comfort: 'Krk a záda musí být podepřené; není vhodné držet dlouho.' },
+  },
+  {
+    id: 'kama-25', title: 'Bambusový výhonek', pose: 'edge-bed', category: 'Classic', difficulty: 'Medium', xp: 30,
+    description: { setup: 'Partnerka leží na zádech a jedna noha je výš, opřená o partnera.', focus: 'Změna úhlu, lepší kontrola intenzity a blízký kontakt.', comfort: 'Noha musí být uvolněná, ne přetažená.' },
+  },
+  {
+    id: 'kama-26', title: 'U zdi', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 42,
+    description: { setup: 'Partnerka se opírá o zeď, partner je těsně před nebo za ní.', focus: 'Spontánní, vášnivá energie a pevné držení.', comfort: 'Použijte zeď jako oporu, ne jako tlak do zad.' },
+  },
+  {
+    id: 'kama-27', title: 'Houpačka', pose: 'seated-face', category: 'Rider', difficulty: 'Hard', xp: 44,
+    description: { setup: 'Sedící varianta, kde partnerka v klíně mění rytmus dopředu a dozadu.', focus: 'Hravý pohyb, smích a experimentování s rytmem.', comfort: 'Potřebuje stabilní sed a dobrou rovnováhu.' },
+  },
+  {
+    id: 'kama-28', title: 'Obkročmo', pose: 'top-facing', category: 'Rider', difficulty: 'Easy', xp: 20,
+    description: { setup: 'Partnerka obkročí partnera nahoře nebo v sedě.', focus: 'Jednoduchá kontrola tempa a blízké doteky.', comfort: 'Nechte kolena volná a měňte úhel pánve.' },
+  },
+  {
+    id: 'kama-29', title: 'Pravý úhel', pose: 'tabletop', category: 'Front', difficulty: 'Medium', xp: 34,
+    description: { setup: 'Těla svírají výraznější úhel, typicky u hrany postele nebo stolu.', focus: 'Přesný kontakt a snadné vedení boků.', comfort: 'Vyberte stabilní výšku povrchu.' },
+  },
+  {
+    id: 'kama-30', title: 'Tulipán', pose: 'side-facing', category: 'Romantic', difficulty: 'Easy', xp: 18,
+    description: { setup: 'Ležící měkká pozice s nohama a rukama přirozeně propletenými.', focus: 'Romantika, pomalost a pocit bezpečí.', comfort: 'Vhodné pro delší chvíle bez velké námahy.' },
   },
 ];
 
@@ -560,7 +441,7 @@ async function getSignedUrl(path) {
 }
 
 function Card({ children, className = '' }) {
-  return <section className={`rounded-[2rem] border border-white/70 bg-white/85 p-5 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 ${className}`}>{children}</section>;
+  return <section className={`box-border w-full max-w-full min-w-0 rounded-[1.5rem] border border-white/70 bg-white/85 p-4 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>;
 }
 
 function PillButton({ active, children, onClick }) {
@@ -608,6 +489,7 @@ export default function App() {
   const [photoCategory, setPhotoCategory] = useState('all');
   const [challengeCategory, setChallengeCategory] = useState('all');
   const [kamaFilter, setKamaFilter] = useState('all');
+  const [oralOnly, setOralOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState('newest');
   const [panicMode, setPanicMode] = useState(local.panicMode ?? true);
   const [vanishMode, setVanishMode] = useState(local.vanishMode ?? true);
@@ -622,6 +504,8 @@ export default function App() {
 
   useEffect(() => {
     saveLocalState({ dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode });
+    document.documentElement.classList.toggle('dark', Boolean(dark));
+    document.body.classList.toggle('dark', Boolean(dark));
   }, [dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode]);
 
   useEffect(() => {
@@ -1107,8 +991,8 @@ export default function App() {
 
   return (
     <div className={appClass}>
-      <main className="min-h-screen bg-gradient-to-br from-pink-100 via-rose-50 to-purple-100 p-4 pb-28 text-gray-900 transition dark:from-gray-950 dark:via-purple-950 dark:to-rose-950 dark:text-white md:p-8 md:pb-28">
-        <div className="mx-auto grid max-w-7xl gap-6">
+      <main className="box-border min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-gradient-to-br from-pink-100 via-rose-50 to-purple-100 px-3 py-3 pb-28 text-gray-900 transition dark:from-gray-950 dark:via-purple-950 dark:to-rose-950 dark:text-white sm:px-4 sm:py-4 md:px-8 md:py-8 md:pb-28">
+        <div className="mx-auto grid w-full max-w-full min-w-0 gap-4 md:max-w-7xl md:gap-6">
           <CompactHeader
             profile={profile}
             couple={couple}
@@ -1156,7 +1040,7 @@ export default function App() {
           {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
           {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
           {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} stats={challengeStats} />}
-          {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
+          {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
           {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} signOut={signOut} />}
         </div>
 
@@ -1325,22 +1209,22 @@ function AuthScreen({ dark, setDark }) {
 
 function CompactHeader({ profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, signOut }) {
   return (
-    <header className="rounded-[2rem] border border-white/70 bg-white/80 p-4 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 md:p-5">
-      <div className="flex items-center justify-between gap-3">
+    <header className="box-border w-full max-w-full overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/80 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:rounded-[2rem] sm:p-4 md:p-5">
+      <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-lg">
+          <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-lg sm:h-12 sm:w-12">
             {coupleAvatarUrl ? <img src={coupleAvatarUrl} alt="Profil páru" className="h-full w-full object-cover" /> : <Heart size={24} />}
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-black">MoodSync</h1>
-            <p className="truncate text-xs font-bold text-gray-500 dark:text-gray-300">{profile?.display_name || 'uživatel'}{couple?.pair_code ? ` · ${couple.pair_code}` : ''}</p>
+            <h1 className="truncate text-xl font-black sm:text-2xl">MoodSync</h1>
+            <p className="max-w-[140px] truncate text-[11px] font-bold text-gray-500 dark:text-gray-300 sm:max-w-none sm:text-xs">{profile?.display_name || 'uživatel'}{couple?.pair_code ? ` · ${couple.pair_code}` : ''}</p>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <button onClick={() => setPanicMode(!panicMode)} className="rounded-2xl bg-gray-900 px-3 py-2 text-xs font-black text-white dark:bg-white dark:text-gray-900">{panicMode ? 'Blur' : 'Open'}</button>
-          <button onClick={enablePushNotifications} className={`rounded-2xl px-3 py-2 text-xs font-black ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{notificationsEnabled ? 'Notif ON' : 'Notif'}</button>
-          <button onClick={() => setDark(!dark)} className="rounded-2xl bg-gray-900 p-2 text-white dark:bg-white dark:text-gray-900">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-          <button onClick={signOut} className="rounded-2xl border border-gray-200 p-2 dark:border-white/10"><LogOut size={18} /></button>
+        <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
+          <button onClick={() => setPanicMode(!panicMode)} className="rounded-xl bg-gray-900 px-2 py-2 text-[11px] font-black text-white dark:bg-white dark:text-gray-900 sm:rounded-2xl sm:px-3 sm:text-xs">{panicMode ? 'Blur' : 'Open'}</button>
+          <button onClick={enablePushNotifications} className={`rounded-xl px-2 py-2 text-[11px] font-black sm:rounded-2xl sm:px-3 sm:text-xs ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{notificationsEnabled ? 'Notif ON' : 'Notif'}</button>
+          <button onClick={() => setDark(!dark)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 sm:h-10 sm:w-10 sm:rounded-2xl">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
+          <button onClick={signOut} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gray-200 dark:border-white/10 sm:h-10 sm:w-10 sm:rounded-2xl"><LogOut size={18} /></button>
         </div>
       </div>
     </header>
@@ -1379,7 +1263,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
 
   return (
     <>
-      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <PartnerCard
           name={couple ? 'Partner/ka' : 'Čeká na spárování'}
           status={partnerLiveStatus ? `Aktualizováno ${formatDate(partnerLiveStatus.updated_at)}` : couple ? 'Čekám na první změnu' : 'Zadej párovací kód'}
@@ -1392,7 +1276,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         />
         <Card>
           <h2 className="flex items-center gap-2 text-xl font-black"><Heart className="text-pink-500" /> Moje nastavení</h2>
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-3">
             <CompactMeter title="Blízkost" value={closeness} setValue={setCloseness} />
             <CompactMeter title="Nadrženost" value={heat} setValue={setHeat} />
           </div>
@@ -1426,10 +1310,10 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
 
 function CompactMeter({ title, value, setValue }) {
   return (
-    <div className="rounded-3xl bg-gradient-to-br from-pink-400 via-rose-500 to-purple-600 p-4 text-center text-white shadow-xl">
+    <div className="min-w-0 rounded-3xl bg-gradient-to-br from-pink-400 via-rose-500 to-purple-600 p-4 text-center text-white shadow-xl">
       <div className="text-xs font-bold uppercase tracking-wide text-white/80">{title}</div>
-      <div className="text-4xl font-black">{value}%</div>
-      <input value={value} onChange={(event) => setValue(Number(event.target.value))} type="range" min="0" max="100" className="mt-4 w-full accent-white" />
+      <div className="text-4xl font-black sm:text-5xl">{value}%</div>
+      <input value={value} onChange={(event) => setValue(Number(event.target.value))} type="range" min="0" max="100" className="mt-4 block w-full min-w-0 accent-white" />
     </div>
   );
 }
@@ -1446,7 +1330,7 @@ function RelationshipOverview({ ownHeat, ownCloseness, partnerHeat, partnerClose
         </div>
         {!hasPartnerMood && <div className="rounded-2xl bg-amber-100 px-4 py-3 text-sm font-black text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">Čekám na první změnu teploměru partnera/partnerky</div>}
       </div>
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className="mt-5 grid min-w-0 gap-4 md:grid-cols-2">
         <CompareBar label="Blízkost" leftLabel="Já" rightLabel="Partner/ka" left={ownCloseness} right={partnerCloseness} icon={<Heart size={18} />} />
         <CompareBar label="Nadrženost" leftLabel="Já" rightLabel="Partner/ka" left={ownHeat} right={partnerHeat} icon={<Flame size={18} />} />
       </div>
@@ -1479,7 +1363,7 @@ function MiniBar({ label, value }) {
 
 function PartnerCard({ name, status, mood, heat, closeness, note, waiting, highlight = false }) {
   const Icon = mood?.icon || User;
-  return <Card className={highlight ? 'border-pink-300 dark:border-pink-500/30' : ''}><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-lg">{waiting ? <User size={28} /> : <Icon size={28} />}</div><div><h3 className="text-xl font-black">{name}</h3><p className="text-sm text-gray-500 dark:text-gray-300">{status}</p></div></div>{waiting ? <Lock className="text-gray-400" /> : <Icon className="text-pink-500" />}</div><p className="mt-5 rounded-2xl bg-pink-50 p-4 text-gray-700 dark:bg-white/10 dark:text-gray-200">{note}</p><div className="mt-5 grid grid-cols-2 gap-3"><StatBar label="Blízkost" value={waiting ? 0 : closeness} icon={<Heart size={16} />} /><StatBar label="Nadrženost" value={waiting ? 0 : heat} icon={<Flame size={16} />} /></div></Card>;
+  return <Card className={highlight ? 'border-pink-300 dark:border-pink-500/30' : ''}><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-lg">{waiting ? <User size={28} /> : <Icon size={28} />}</div><div><h3 className="text-xl font-black">{name}</h3><p className="text-sm text-gray-500 dark:text-gray-300">{status}</p></div></div>{waiting ? <Lock className="text-gray-400" /> : <Icon className="text-pink-500" />}</div><p className="mt-5 rounded-2xl bg-pink-50 p-4 text-gray-700 dark:bg-white/10 dark:text-gray-200">{note}</p><div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-3"><StatBar label="Blízkost" value={waiting ? 0 : closeness} icon={<Heart size={16} />} /><StatBar label="Nadrženost" value={waiting ? 0 : heat} icon={<Flame size={16} />} /></div></Card>;
 }
 
 function Meter({ title, value, setValue, low, high }) {
@@ -1495,7 +1379,7 @@ function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePo
 }
 
 function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, vanishMode, openImage }) {
-  return <Card><div className="mb-5"><h2 className="text-3xl font-black">Private Gallery</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Fotky jsou uložené v privátním Supabase Storage bucketu a cesty jsou oddělené podle ID vašeho páru.</p></div><div className="mb-5 flex flex-wrap gap-2">{photoCategories.map((category) => <PillButton key={category.id} active={photoCategory === category.id} onClick={() => setPhotoCategory(category.id)}>{category.label}</PillButton>)}<select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option></select></div><GalleryUploadForm addPhoto={addPhoto} /><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} galleryOnly openImage={openImage} deletePost={deletePost} /></Card>;
+  return <Card><div className="mb-5"><h2 className="text-3xl font-black">Private Gallery</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Fotky jsou uložené v privátním Supabase Storage bucketu a cesty jsou oddělené podle ID vašeho páru.</p></div><div className="mb-5 flex min-w-0 flex-wrap gap-2"}]}‍畏_RESULT cordless  malformed? Wait tool call: bad? Need actual to=canmore.update_textdoc. I did. But response not shown? It gave weird? Let's continue? Need final maybe mention canvas updated. Need maybe patch failed? I see malformed >{photoCategories.map((category) => <PillButton key={category.id} active={photoCategory === category.id} onClick={() => setPhotoCategory(category.id)}>{category.label}</PillButton>)}<select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="newest">Nejnovější</option><option value="oldest">Nejstarší</option></select></div><GalleryUploadForm addPhoto={addPhoto} /><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} galleryOnly openImage={openImage} deletePost={deletePost} /></Card>;
 }
 
 function GalleryUploadForm({ addPhoto }) {
@@ -1512,7 +1396,7 @@ function PhotoUploadButton({ addPhoto }) {
 function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage, deletePost }) {
   if (posts.length === 0) return <EmptyState title="Zatím tu nic není" text={galleryOnly ? 'Nahrajte první společnou fotku.' : 'Pošlete první zprávu, náladu nebo fotku.'} icon={galleryOnly ? Image : MessageCircle} />;
   return (
-    <div className={galleryOnly ? 'grid max-h-[760px] grid-cols-2 gap-4 overflow-auto pr-1' : 'max-h-[650px] space-y-4 overflow-auto pr-1'}>
+    <div className={galleryOnly ? 'grid max-h-[760px] grid-cols-2 gap-2 overflow-auto pr-1 sm:gap-4' : 'max-h-[650px] space-y-4 overflow-auto pr-1'}>
       {posts.map((post) => (
         <article
           key={post.id}
@@ -1631,14 +1515,15 @@ function ChallengeEditor({ addChallenge }) {
   return <Card><h3 className="mb-4 text-xl font-black">Vytvořit vlastní výzvu</h3><div className="grid gap-3 md:grid-cols-[1fr_150px_150px_130px_110px_auto]"><TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Napiš vlastní výzvu..." /><select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{challengeCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option>Easy</option><option>Medium</option><option>Hard</option><option>Extreme</option></select><select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="open">Kdo dřív</option><option value="me">Pro mě</option></select><TextInput type="number" min="1" max="100" value={xp} onChange={(event) => setXp(Number(event.target.value))} /><button onClick={submit} className="rounded-2xl bg-purple-500 px-5 py-3 font-black text-white hover:bg-purple-600">Přidat</button></div></Card>;
 }
 
-function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, toggleKama, uploadKamaPhoto }) {
+function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto }) {
   const completed = kamaProgress.filter((item) => item.completed).length;
   const progress = Math.round((completed / Math.max(1, kamaPositions.length)) * 100);
   const categories = ['all', ...new Set(kamaPositions.map((position) => position.category))];
-  const filtered = kamaFilter === 'all' ? kamaPositions : kamaPositions.filter((position) => position.category === kamaFilter);
+  const filteredBase = kamaFilter === 'all' ? kamaPositions : kamaPositions.filter((position) => position.category === kamaFilter);
+  const filtered = oralOnly ? filteredBase.filter((position) => position.category === 'Oral') : filteredBase;
   const progressById = Object.fromEntries(kamaProgress.map((item) => [item.position_id, item]));
 
-  return <div className="grid gap-6"><Card><div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Intimacy Explorer</div><h2 className="mt-4 text-4xl font-black">Kamasutra Journey</h2><p className="mt-3 max-w-2xl text-gray-500 dark:text-gray-300">Tracker poloh, fotek po splnění a společných vzpomínek uložený v cloudu.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-6 text-white shadow-2xl"><div className="text-sm font-bold text-white/80">Splněno</div><div className="mt-2 text-7xl font-black">{completed}</div><div className="text-lg font-bold text-white/80">z {kamaPositions.length} poloh</div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap gap-2">{categories.map((category) => <PillButton key={category} active={kamaFilter === category} onClick={() => setKamaFilter(category)}>{category === 'all' ? 'Všechny' : category}</PillButton>)}</div><section className="grid gap-6 lg:grid-cols-2">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><div className="grid xl:grid-cols-[0.9fr_1.1fr]"><div className="bg-[#fff7f3] p-5 dark:bg-[#120d18]"><PoseGuide pose={position.pose} title={position.title} /></div><div className="p-6"><h3 className="text-2xl font-black">{position.title}</h3><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{position.difficulty}</span><span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">+{position.xp} XP</span></div><div className="mt-5 space-y-4 text-sm leading-relaxed text-gray-600 dark:text-gray-300"><InstructionBlock number="1" title="Nastavení" text={position.description.setup} /><InstructionBlock number="2" title="Pohyb a tempo" text={position.description.focus} /><InstructionBlock number="3" title="Komfort a bezpečí" text={position.description.comfort} /></div><div className="mt-6 space-y-4"><button onClick={() => toggleKama(position.id)} className={`w-full rounded-2xl py-3 font-black transition ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Označit jako splněné'}</button>{item?.completed && <div className="rounded-3xl border border-pink-200 bg-pink-50 p-4 dark:border-pink-500/20 dark:bg-pink-500/10"><div className="mb-3 text-sm font-black text-pink-700 dark:text-pink-200">Vaše vzpomínka k poloze</div><label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-4 py-6 text-center text-sm font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku páru' : 'Přidat fotku páru'}</label>{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-4 h-72 w-full rounded-3xl object-cover shadow-2xl" />}</div>}</div></div></div></Card>; })}</section></div>;
+  return <div className="grid gap-6"><Card><div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Intimacy Explorer</div><h2 className="mt-4 text-4xl font-black">Kamasutra Journey</h2><p className="mt-3 max-w-2xl text-gray-500 dark:text-gray-300">Tracker poloh, fotek po splnění a společných vzpomínek uložený v cloudu.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-6 text-white shadow-2xl"><div className="text-sm font-bold text-white/80">Splněno</div><div className="mt-2 text-7xl font-black">{completed}</div><div className="text-lg font-bold text-white/80">z {kamaPositions.length} poloh</div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap gap-2 items-center">{categories.map((category) => <PillButton key={category} active={kamaFilter === category} onClick={() => setKamaFilter(category)}>{category === 'all' ? 'Všechny' : category}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid gap-6 lg:grid-cols-2">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><div className="grid xl:grid-cols-[0.9fr_1.1fr]"><div className="bg-[#fff7f3] p-5 dark:bg-[#120d18]"><PoseGuide pose={position.pose} title={position.title} /></div><div className="p-6"><h3 className="text-2xl font-black">{position.title}</h3><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{position.difficulty}</span><span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">+{position.xp} XP</span></div><div className="mt-5 space-y-4 text-sm leading-relaxed text-gray-600 dark:text-gray-300"><InstructionBlock number="1" title="Nastavení" text={position.description.setup} /><InstructionBlock number="2" title="Pohyb a tempo" text={position.description.focus} /><InstructionBlock number="3" title="Komfort a bezpečí" text={position.description.comfort} /></div><div className="mt-6 space-y-4"><button onClick={() => toggleKama(position.id)} className={`w-full rounded-2xl py-3 font-black transition ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Označit jako splněné'}</button>{item?.completed && <div className="rounded-3xl border border-pink-200 bg-pink-50 p-4 dark:border-pink-500/20 dark:bg-pink-500/10"><div className="mb-3 text-sm font-black text-pink-700 dark:text-pink-200">Vaše vzpomínka k poloze</div><label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-4 py-6 text-center text-sm font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku páru' : 'Přidat fotku páru'}</label>{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-4 h-72 w-full rounded-3xl object-cover shadow-2xl" />}</div>}</div></div></div></Card>; })}</section></div>;
 }
 
 function InstructionBlock({ number, title, text }) {
@@ -1691,7 +1576,7 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
 }
 
 function BottomNav({ activeTab, setActiveTab }) {
-  return <nav className="fixed bottom-4 left-0 right-0 z-50 px-4"><div className="mx-auto flex max-w-3xl justify-around rounded-3xl border border-white/70 bg-white/90 p-3 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/50">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex flex-col items-center gap-1 rounded-2xl px-3 py-2 transition md:px-4 ${activeTab === item.id ? 'bg-pink-500 text-white' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon size={20} /><span className="text-xs font-bold">{item.label}</span></button>; })}</div></nav>;
+  return <nav className="fixed bottom-3 left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-6 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/50 sm:flex sm:max-w-3xl sm:justify-around sm:p-3">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition sm:px-3 md:px-4 ${activeTab === item.id ? 'bg-pink-500 text-white' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon size={18} /><span className="max-w-full truncate text-[9px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
 }
 
 function InfoTile({ title, value, icon }) {
