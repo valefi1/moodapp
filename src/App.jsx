@@ -35,6 +35,7 @@ const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supa
 
 const LOCAL_KEY = 'moodsync-ui-v2';
 const STORAGE_BUCKET = 'couple-media';
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
 const moods = [
   { id: 'love', icon: Heart, label: 'Zamilovaný/á', color: 'from-pink-400 to-rose-500', tone: 'positive' },
@@ -204,13 +205,14 @@ const starterChallenges = [
   },
 ];
 
-function normalizeStarterChallenge(challenge, coupleId) {
+function normalizeStarterChallenge(challenge, coupleId, index = 0, userId = null) {
   return {
     couple_id: coupleId,
     title: challenge.title,
     category: challenge.category,
     difficulty: challenge.difficulty,
     xp: challenge.xp,
+    assigned_to: index % 2 === 0 ? userId : null,
     accepted: false,
     completed: false,
   };
@@ -509,9 +511,25 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
-function getChallengeStats(challenges) {
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
+}
+
+function getChallengeStats(challenges, currentUserId) {
   const completed = challenges.filter((challenge) => challenge.completed);
   const coupleXp = completed.reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
+  const myXp = completed.filter((challenge) => challenge.completed_by === currentUserId).reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
+  const partnerXp = completed.filter((challenge) => challenge.completed_by && challenge.completed_by !== currentUserId).reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
+  const openXp = completed.filter((challenge) => !challenge.completed_by).reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
   const currentTier = [...rewardTiers].reverse().find((tier) => coupleXp >= tier.minXp) || rewardTiers[0];
   const nextTier = rewardTiers.find((tier) => tier.minXp > coupleXp) || rewardTiers[rewardTiers.length - 1];
   const currentMin = currentTier.minXp;
@@ -523,7 +541,7 @@ function getChallengeStats(challenges) {
     xp: completed.filter((challenge) => challenge.category === category.id).reduce((sum, challenge) => sum + (challenge.xp || 10), 0),
   }));
 
-  return { coupleXp, level: currentTier.level, title: currentTier.title, currentMin, nextMin, progress: Math.max(0, Math.min(100, progress)), categoryScores };
+  return { coupleXp, myXp, partnerXp, openXp, level: currentTier.level, title: currentTier.title, currentMin, nextMin, progress: Math.max(0, Math.min(100, progress)), categoryScores };
 }
 
 async function uploadToStorage(file, folder) {
@@ -596,6 +614,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [creatingCouple, setCreatingCouple] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   const isBackendReady = Boolean(supabase);
   const selectedMood = moods.find((mood) => mood.id === selectedMoodId) || moods[0];
@@ -626,6 +645,7 @@ export default function App() {
   useEffect(() => {
     if (!session?.user) return;
     loadCloudData();
+    checkNotificationState();
   }, [session?.user?.id]);
 
   useEffect(() => {
@@ -723,20 +743,83 @@ export default function App() {
     if (error) setToast(error.message);
   }
 
+  async function checkNotificationState() {
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+    const subscription = await registration?.pushManager.getSubscription();
+    setNotificationsEnabled(Notification.permission === 'granted' && Boolean(subscription));
+  }
+
+  async function enablePushNotifications() {
+    if (!couple?.id || !session?.user?.id) return setToast('Nejdřív vytvoř nebo připoj pár.');
+    if (!VAPID_PUBLIC_KEY) return setToast('Chybí VITE_VAPID_PUBLIC_KEY ve Vercel environment variables.');
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return setToast('Tenhle prohlížeč nepodporuje push notifikace.');
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return setToast('Upozornění nejsou povolená. Povol je v nastavení prohlížeče.');
+
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+
+      const { error } = await supabase.from('push_subscriptions').upsert(
+        {
+          couple_id: couple.id,
+          user_id: session.user.id,
+          subscription,
+          user_agent: navigator.userAgent,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+      if (error) throw error;
+      setNotificationsEnabled(true);
+      setToast('Mobilní upozornění jsou zapnutá.');
+    } catch (error) {
+      setToast(`Upozornění se nepodařilo zapnout: ${error.message}`);
+    }
+  }
+
+  async function notifyPartner(eventType, title, body) {
+    if (!couple?.id || !session?.user?.id) return;
+
+    try {
+      await supabase.functions.invoke('send-push-notification', {
+        body: {
+          coupleId: couple.id,
+          senderId: session.user.id,
+          eventType,
+          title,
+          body,
+          url: '/',
+        },
+      });
+    } catch {
+      // Notifikace nesmí blokovat hlavní akci v aplikaci.
+    }
+  }
+
   async function updateHeatValue(value) {
     setHeat(value);
     await saveMyStatus({ heat: value });
+    await notifyPartner('heat_changed', 'MoodSync', 'Partner/ka změnil/a teploměr nadrženosti.');
   }
 
   async function updateClosenessValue(value) {
     setCloseness(value);
     await saveMyStatus({ closeness: value });
+    await notifyPartner('closeness_changed', 'MoodSync', 'Partner/ka změnil/a teploměr blízkosti.');
   }
 
   async function updateMoodValue(moodId) {
     const nextMood = moods.find((mood) => mood.id === moodId) || moods[0];
     setSelectedMoodId(moodId);
     await saveMyStatus({ moodLabel: nextMood.label });
+    await notifyPartner('mood_changed', 'MoodSync', `Partner/ka má novou náladu: ${nextMood.label}.`);
   }
 
   async function loadChallenges(coupleId) {
@@ -825,7 +908,7 @@ export default function App() {
   }
 
   async function seedChallenges(coupleId) {
-    const rows = starterChallenges.map((challenge) => normalizeStarterChallenge(challenge, coupleId));
+    const rows = starterChallenges.map((challenge, index) => normalizeStarterChallenge(challenge, coupleId, index, session?.user?.id));
     const { error } = await supabase.from('challenges').insert(rows);
     if (error && !String(error.message).includes('duplicate')) {
       setToast(`Výzvy se nepodařilo založit: ${error.message}`);
@@ -894,6 +977,7 @@ export default function App() {
       if (error) throw error;
       await loadPosts(couple.id);
       setActiveTab('gallery');
+      await notifyPartner('photo_added', 'MoodSync', 'Partner/ka přidal/a novou fotku do galerie.');
     } catch (error) {
       setToast(error.message);
     }
@@ -921,13 +1005,23 @@ export default function App() {
 
   async function addChallenge(payload) {
     if (!couple?.id || !payload.title?.trim()) return;
-    const { error } = await supabase.from('challenges').insert({ couple_id: couple.id, title: payload.title.trim(), category: payload.category, difficulty: payload.difficulty, xp: Number(payload.xp) || 10, accepted: false, completed: false });
+    const { error } = await supabase.from('challenges').insert({
+      couple_id: couple.id,
+      title: payload.title.trim(),
+      category: payload.category,
+      difficulty: payload.difficulty,
+      xp: Number(payload.xp) || 10,
+      assigned_to: payload.assignedTo === 'me' ? session.user.id : null,
+      accepted: false,
+      completed: false,
+    });
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
   }
 
   async function updateChallenge(id, patch) {
-    const { error } = await supabase.from('challenges').update(patch).eq('id', id);
+    const normalizedPatch = patch.completed ? { ...patch, completed_by: session.user.id } : patch;
+    const { error } = await supabase.from('challenges').update(normalizedPatch).eq('id', id);
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
   }
@@ -977,7 +1071,7 @@ export default function App() {
 
   const photoPosts = filteredPosts.filter((post) => post.type === 'photo');
   const filteredChallenges = challenges.filter((challenge) => challengeCategory === 'all' || challenge.category === challengeCategory);
-  const challengeStats = getChallengeStats(challenges);
+  const challengeStats = getChallengeStats(challenges, session?.user?.id);
 
   const latestOwnMoodPost = useMemo(
     () => posts.find((post) => post.type === 'mood' && post.author_id === session?.user?.id) || null,
@@ -1015,7 +1109,7 @@ export default function App() {
     <div className={appClass}>
       <main className="min-h-screen bg-gradient-to-br from-pink-100 via-rose-50 to-purple-100 p-4 pb-28 text-gray-900 transition dark:from-gray-950 dark:via-purple-950 dark:to-rose-950 dark:text-white md:p-8 md:pb-28">
         <div className="mx-auto grid max-w-7xl gap-6">
-          <Header
+          <CompactHeader
             profile={profile}
             couple={couple}
             coupleAvatarUrl={coupleAvatarUrl}
@@ -1023,9 +1117,8 @@ export default function App() {
             setDark={setDark}
             panicMode={panicMode}
             setPanicMode={setPanicMode}
-            vanishMode={vanishMode}
-            setVanishMode={setVanishMode}
-            copyText={(value) => navigator.clipboard?.writeText(value)}
+            notificationsEnabled={notificationsEnabled}
+            enablePushNotifications={enablePushNotifications}
             signOut={signOut}
           />
 
@@ -1230,32 +1323,25 @@ function AuthScreen({ dark, setDark }) {
   );
 }
 
-function Header({ profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, vanishMode, setVanishMode, copyText, signOut }) {
+function CompactHeader({ profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, signOut }) {
   return (
-    <header className="rounded-[2rem] border border-white/70 bg-white/80 p-6 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 md:p-8">
-      <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
-        <div>
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-bold text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Sparkles size={16} /> Online prostor jen pro vás dva</div>
-          <div className="flex items-center gap-4">
-            <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-xl">
-              {coupleAvatarUrl ? <img src={coupleAvatarUrl} alt="Profil páru" className="h-full w-full object-cover" /> : <Heart size={38} />}
-            </div>
-            <h1 className="text-4xl font-black tracking-tight md:text-6xl">MoodSync</h1>
+    <header className="rounded-[2rem] border border-white/70 bg-white/80 p-4 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 md:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-lg">
+            {coupleAvatarUrl ? <img src={coupleAvatarUrl} alt="Profil páru" className="h-full w-full object-cover" /> : <Heart size={24} />}
           </div>
-          <p className="mt-3 max-w-2xl text-lg text-gray-600 dark:text-gray-300">Přihlášen/a jako <b>{profile?.display_name || 'uživatel'}</b>. Feed, galerie, výzvy i Kamasutra progress jsou uložené v Supabase.</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-black">MoodSync</h1>
+            <p className="truncate text-xs font-bold text-gray-500 dark:text-gray-300">{profile?.display_name || 'uživatel'}{couple?.pair_code ? ` · ${couple.pair_code}` : ''}</p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button onClick={() => setPanicMode(!panicMode)} className="rounded-2xl bg-gray-900 px-4 py-3 font-bold text-white dark:bg-white dark:text-gray-900">{panicMode ? 'Panic blur aktivní' : 'Panic blur vypnutý'}</button>
-          <button onClick={() => setVanishMode(!vanishMode)} className="rounded-2xl bg-pink-100 px-4 py-3 font-bold text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{vanishMode ? 'Mizící štítek 24 h' : 'Uložit trvale'}</button>
-          <button onClick={() => setDark(!dark)} className="rounded-2xl bg-gray-900 px-4 py-3 font-bold text-white dark:bg-white dark:text-gray-900">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-          <button onClick={signOut} className="inline-flex items-center gap-2 rounded-2xl border border-gray-200 px-4 py-3 font-bold dark:border-white/10"><LogOut size={18} /> Odhlásit</button>
+        <div className="flex shrink-0 gap-2">
+          <button onClick={() => setPanicMode(!panicMode)} className="rounded-2xl bg-gray-900 px-3 py-2 text-xs font-black text-white dark:bg-white dark:text-gray-900">{panicMode ? 'Blur' : 'Open'}</button>
+          <button onClick={enablePushNotifications} className={`rounded-2xl px-3 py-2 text-xs font-black ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{notificationsEnabled ? 'Notif ON' : 'Notif'}</button>
+          <button onClick={() => setDark(!dark)} className="rounded-2xl bg-gray-900 p-2 text-white dark:bg-white dark:text-gray-900">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
+          <button onClick={signOut} className="rounded-2xl border border-gray-200 p-2 dark:border-white/10"><LogOut size={18} /></button>
         </div>
-      </div>
-      <div className="mt-8 grid gap-4 md:grid-cols-4">
-        <InfoTile title="Párovací kód" value={couple?.pair_code || 'Bez páru'} icon={couple ? <button onClick={() => copyText(couple.pair_code)}><Copy size={20} /></button> : null} />
-        <InfoTile title="Stav" value={couple ? 'Online pár' : 'Čeká na pár'} />
-        <InfoTile title="Bezpečnost" value="Supabase RLS" icon={<ShieldCheck size={20} />} />
-        <InfoTile title="Storage" value="Couple protected" icon={<Lock size={20} />} />
       </div>
     </header>
   );
@@ -1293,61 +1379,58 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
 
   return (
     <>
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <PartnerCard
-          name={profile?.display_name || 'Já'}
-          status={myLiveStatus ? `Teploměr aktualizován ${formatDate(myLiveStatus.updated_at)}` : latestOwnMoodPost ? `Naposledy sdíleno ${formatDate(latestOwnMoodPost.created_at)}` : 'Online'}
-          mood={ownMood}
-          heat={ownHeat}
-          closeness={ownCloseness}
-          note={latestOwnMoodPost?.text || thought || `Aktuální nálada: ${selectedMood.label}. Blízkost ${closeness} %, nadrženost ${heat} %.`}
-        />
-        <PartnerCard
-          name={couple ? 'Partner/ka v páru' : 'Čeká na spárování'}
-          status={partnerLiveStatus ? `Teploměr aktualizován ${formatDate(partnerLiveStatus.updated_at)}` : latestPartnerMoodPost ? `Naposledy sdíleno ${formatDate(latestPartnerMoodPost.created_at)}` : couple ? 'Zatím bez sdíleného teploměru' : 'Vytvoř nebo zadej párovací kód'}
+          name={couple ? 'Partner/ka' : 'Čeká na spárování'}
+          status={partnerLiveStatus ? `Aktualizováno ${formatDate(partnerLiveStatus.updated_at)}` : couple ? 'Čekám na první změnu' : 'Zadej párovací kód'}
           mood={partnerMood || selectedMood}
           heat={partnerHeat}
           closeness={partnerCloseness}
-          note={latestPartnerMoodPost?.text || (couple ? 'Partner/ka zatím neposlal/a text nálady. Teploměr se ale aktualizuje samostatně při změně sliderů.' : 'Pár zatím není propojený.')}
+          note={latestPartnerMoodPost?.text || (couple ? 'Jakmile partner/ka změní náladu nebo teploměr, uvidíš to tady nahoře.' : 'Pár zatím není propojený.')}
           waiting={!couple || !partnerLiveStatus}
+          highlight
         />
-      </section>
-
-      <RelationshipOverview
-        ownHeat={ownHeat}
-        ownCloseness={ownCloseness}
-        partnerHeat={partnerHeat}
-        partnerCloseness={partnerCloseness}
-        hasPartnerMood={Boolean(partnerLiveStatus)}
-      />
-
-      <section className="grid gap-6 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <h2 className="mb-5 flex items-center justify-between text-2xl font-black">Jak se právě cítíš?<Bell className="text-pink-500" /></h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {moods.map((mood) => {
-              const Icon = mood.icon;
-              return <button key={mood.id} onClick={() => setSelectedMoodId(mood.id)} className={`rounded-3xl border p-4 text-left shadow-sm transition ${selectedMood.id === mood.id ? 'border-pink-500 bg-pink-50 dark:bg-pink-500/20' : 'border-gray-200 bg-white/70 hover:bg-pink-50 dark:border-white/10 dark:bg-white/5'}`}><div className={`grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br ${mood.color} text-white shadow-md`}><Icon size={24} /></div><div className="mt-3 font-black">{mood.label}</div><div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{mood.tone === 'negative' ? 'Signál pro péči a pochopení' : 'Sdílet partnerovi'}</div></button>;
-            })}
-          </div>
-          <label className="mt-6 block font-black">Myšlenka pro partnera</label>
-          <textarea value={thought} onChange={(event) => setThought(event.target.value)} placeholder="Napiš, co se ti honí hlavou..." className="mt-2 min-h-[120px] w-full rounded-3xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white" />
-          <button onClick={addPost} className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-pink-500 px-6 py-3 font-black text-white shadow-lg hover:bg-pink-600"><Send size={18} /> Sdílet náladu</button>
-        </Card>
         <Card>
-          <h2 className="flex items-center gap-2 text-2xl font-black"><Heart className="text-pink-500" /> Teploměr vztahu</h2>
-          <Meter title="Moje blízkost" value={closeness} setValue={setCloseness} low="potřebuju péči" high="cítím se blízko" />
-          <Meter title="Moje nadrženost" value={heat} setValue={setHeat} low="soft" high="after dark" />
-        </Card>
-        <Card className="xl:col-span-3">
-          <h3 className="text-xl font-black">Profil</h3>
-          <div className="mt-4 flex gap-3">
-            <TextInput placeholder="Tvoje jméno" value={partnerName} onChange={(event) => setPartnerName(event.target.value)} />
-            <button onClick={() => updateProfileName(partnerName)} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Uložit jméno</button>
+          <h2 className="flex items-center gap-2 text-xl font-black"><Heart className="text-pink-500" /> Moje nastavení</h2>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <CompactMeter title="Blízkost" value={closeness} setValue={setCloseness} />
+            <CompactMeter title="Nadrženost" value={heat} setValue={setHeat} />
           </div>
+          <textarea value={thought} onChange={(event) => setThought(event.target.value)} placeholder="Myšlenka pro partnera..." className="mt-4 min-h-[96px] w-full rounded-3xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white" />
+          <button onClick={addPost} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white shadow-lg hover:bg-pink-600"><Send size={18} /> Sdílet myšlenku do feedu</button>
         </Card>
       </section>
+
+      <RelationshipOverview ownHeat={ownHeat} ownCloseness={ownCloseness} partnerHeat={partnerHeat} partnerCloseness={partnerCloseness} hasPartnerMood={Boolean(partnerLiveStatus)} />
+
+      <Card>
+        <h2 className="mb-4 flex items-center justify-between text-2xl font-black">Moje aktuální nálada<Bell className="text-pink-500" /></h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {moods.map((mood) => {
+            const Icon = mood.icon;
+            return <button key={mood.id} onClick={() => setSelectedMoodId(mood.id)} className={`rounded-3xl border p-4 text-left shadow-sm transition ${selectedMood.id === mood.id ? 'border-pink-500 bg-pink-50 dark:bg-pink-500/20' : 'border-gray-200 bg-white/70 hover:bg-pink-50 dark:border-white/10 dark:bg-white/5'}`}><div className={`grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br ${mood.color} text-white shadow-md`}><Icon size={22} /></div><div className="mt-3 text-sm font-black">{mood.label}</div></button>;
+          })}
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="text-xl font-black">Profil</h3>
+        <div className="mt-4 flex gap-3">
+          <TextInput placeholder="Tvoje jméno" value={partnerName} onChange={(event) => setPartnerName(event.target.value)} />
+          <button onClick={() => updateProfileName(partnerName)} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Uložit</button>
+        </div>
+      </Card>
     </>
+  );
+}
+
+function CompactMeter({ title, value, setValue }) {
+  return (
+    <div className="rounded-3xl bg-gradient-to-br from-pink-400 via-rose-500 to-purple-600 p-4 text-center text-white shadow-xl">
+      <div className="text-xs font-bold uppercase tracking-wide text-white/80">{title}</div>
+      <div className="text-4xl font-black">{value}%</div>
+      <input value={value} onChange={(event) => setValue(Number(event.target.value))} type="range" min="0" max="100" className="mt-4 w-full accent-white" />
+    </div>
   );
 }
 
@@ -1394,9 +1477,9 @@ function MiniBar({ label, value }) {
   );
 }
 
-function PartnerCard({ name, status, mood, heat, closeness, note, waiting }) {
+function PartnerCard({ name, status, mood, heat, closeness, note, waiting, highlight = false }) {
   const Icon = mood?.icon || User;
-  return <Card><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-lg">{waiting ? <User size={28} /> : <Icon size={28} />}</div><div><h3 className="text-xl font-black">{name}</h3><p className="text-sm text-gray-500 dark:text-gray-300">{status}</p></div></div>{waiting ? <Lock className="text-gray-400" /> : <Icon className="text-pink-500" />}</div><p className="mt-5 rounded-2xl bg-pink-50 p-4 text-gray-700 dark:bg-white/10 dark:text-gray-200">{note}</p><div className="mt-5 grid grid-cols-2 gap-3"><StatBar label="Blízkost" value={waiting ? 0 : closeness} icon={<Heart size={16} />} /><StatBar label="Nadrženost" value={waiting ? 0 : heat} icon={<Flame size={16} />} /></div></Card>;
+  return <Card className={highlight ? 'border-pink-300 dark:border-pink-500/30' : ''}><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-lg">{waiting ? <User size={28} /> : <Icon size={28} />}</div><div><h3 className="text-xl font-black">{name}</h3><p className="text-sm text-gray-500 dark:text-gray-300">{status}</p></div></div>{waiting ? <Lock className="text-gray-400" /> : <Icon className="text-pink-500" />}</div><p className="mt-5 rounded-2xl bg-pink-50 p-4 text-gray-700 dark:bg-white/10 dark:text-gray-200">{note}</p><div className="mt-5 grid grid-cols-2 gap-3"><StatBar label="Blízkost" value={waiting ? 0 : closeness} icon={<Heart size={16} />} /><StatBar label="Nadrženost" value={waiting ? 0 : heat} icon={<Flame size={16} />} /></div></Card>;
 }
 
 function Meter({ title, value, setValue, low, high }) {
@@ -1535,7 +1618,7 @@ function FullscreenImageViewer({ image, onClose }) {
 }
 
 function ChallengesPanel({ challenges, allChallenges, category, setCategory, addChallenge, updateChallenge, stats }) {
-  return <div className="grid gap-6"><Card><div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1 text-sm font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200"><Trophy size={16} /> Couple progression</div><h2 className="mt-3 text-3xl font-black">Level {stats.level}: {stats.title}</h2><p className="mt-2 text-gray-500 dark:text-gray-300">Plňte výzvy, sbírejte XP a posouvejte vztahovou chemii dál.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 p-6 text-white shadow-xl"><div className="flex items-center justify-between"><div><div className="text-sm font-bold text-white/80">Celkové XP</div><div className="text-5xl font-black">{stats.coupleXp}</div></div><Award size={46} /></div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${stats.progress}%` }} /></div><div className="mt-2 flex justify-between text-xs font-bold text-white/80"><span>{stats.currentMin} XP</span><span>{stats.nextMin} XP</span></div></div></div></Card><section className="grid gap-6 lg:grid-cols-3"><Card><h3 className="flex items-center gap-2 text-xl font-black"><Star className="text-pink-500" /> Kategorie skóre</h3><div className="mt-5 space-y-4">{stats.categoryScores.map((score) => <div key={score.id}><div className="mb-2 flex justify-between text-sm font-bold"><span>{score.label}</span><span>{score.xp} XP</span></div><div className="h-3 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"><div className={`h-full rounded-full bg-gradient-to-r ${score.color}`} style={{ width: `${Math.min(100, score.xp)}%` }} /></div></div>)}</div></Card><Card className="lg:col-span-2"><h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-purple-500" /> Odměny a levely</h3><div className="mt-5 grid gap-3 md:grid-cols-2">{rewardTiers.map((tier) => <div key={tier.level} className={`rounded-3xl border p-4 ${stats.coupleXp >= tier.minXp ? 'border-pink-200 bg-pink-50 dark:border-pink-500/30 dark:bg-pink-500/10' : 'border-gray-200 bg-white/70 opacity-60 dark:border-white/10 dark:bg-white/5'}`}><div className="text-sm font-black text-gray-500 dark:text-gray-300">Level {tier.level} · {tier.minXp} XP</div><h4 className="mt-1 text-lg font-black">{tier.title}</h4><p className="mt-1 text-sm text-gray-500 dark:text-gray-300">{tier.reward}</p></div>)}</div></Card></section><ChallengeEditor addChallenge={addChallenge} /><Card><div className="mb-5 flex flex-wrap gap-2">{challengeCategories.map((item) => <PillButton key={item.id} active={category === item.id} onClick={() => setCategory(item.id)}>{item.label}</PillButton>)}</div><div className="grid gap-4 lg:grid-cols-2">{challenges.map((challenge) => <article key={challenge.id} className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5"><h4 className="text-lg font-black">{challenge.title}</h4><div className="mt-2 flex flex-wrap gap-2 text-sm"><span className="rounded-full bg-pink-500 px-3 py-1 font-bold text-white">{challenge.category}</span><span className="rounded-full bg-purple-500 px-3 py-1 font-bold text-white">+{challenge.xp || 10} XP</span></div><div className="mt-4 flex gap-2"><button onClick={() => updateChallenge(challenge.id, { accepted: !challenge.accepted })} disabled={challenge.completed} className="flex-1 rounded-2xl bg-gray-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">{challenge.accepted ? 'Odebrat' : 'Přijmout'}</button><button onClick={() => updateChallenge(challenge.id, { completed: true, accepted: true, completed_at: new Date().toISOString() })} disabled={challenge.completed} className="flex-1 rounded-2xl bg-pink-500 px-4 py-2 text-sm font-black text-white disabled:opacity-40">{challenge.completed ? 'Hotovo' : 'Splnit'}</button></div></article>)}</div></Card></div>;
+  return <div className="grid gap-6"><Card><div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1 text-sm font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200"><Trophy size={16} /> Couple progression</div><h2 className="mt-3 text-3xl font-black">Level {stats.level}: {stats.title}</h2><p className="mt-2 text-gray-500 dark:text-gray-300">Plňte vlastní výzvy, sbírejte XP a soutěžte, kdo bude mít víc bodů.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 p-6 text-white shadow-xl"><div className="flex items-center justify-between"><div><div className="text-sm font-bold text-white/80">Souboj XP</div><div className="text-5xl font-black">{stats.myXp}:{stats.partnerXp}</div><div className="mt-1 text-xs font-bold text-white/80">Já vs Partner/ka</div></div><Award size={46} /></div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${stats.progress}%` }} /></div><div className="mt-2 flex justify-between text-xs font-bold text-white/80"><span>{stats.currentMin} XP</span><span>{stats.nextMin} XP</span></div></div></div></Card><section className="grid gap-6 lg:grid-cols-3"><Card><h3 className="flex items-center gap-2 text-xl font-black"><Star className="text-pink-500" /> Kategorie skóre</h3><div className="mt-5 space-y-4">{stats.categoryScores.map((score) => <div key={score.id}><div className="mb-2 flex justify-between text-sm font-bold"><span>{score.label}</span><span>{score.xp} XP</span></div><div className="h-3 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"><div className={`h-full rounded-full bg-gradient-to-r ${score.color}`} style={{ width: `${Math.min(100, score.xp)}%` }} /></div></div>)}</div></Card><Card className="lg:col-span-2"><h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-purple-500" /> Odměny a levely</h3><div className="mt-5 grid gap-3 md:grid-cols-2">{rewardTiers.map((tier) => <div key={tier.level} className={`rounded-3xl border p-4 ${stats.coupleXp >= tier.minXp ? 'border-pink-200 bg-pink-50 dark:border-pink-500/30 dark:bg-pink-500/10' : 'border-gray-200 bg-white/70 opacity-60 dark:border-white/10 dark:bg-white/5'}`}><div className="text-sm font-black text-gray-500 dark:text-gray-300">Level {tier.level} · {tier.minXp} XP</div><h4 className="mt-1 text-lg font-black">{tier.title}</h4><p className="mt-1 text-sm text-gray-500 dark:text-gray-300">{tier.reward}</p></div>)}</div></Card></section><ChallengeEditor addChallenge={addChallenge} /><Card><div className="mb-5 flex flex-wrap gap-2">{challengeCategories.map((item) => <PillButton key={item.id} active={category === item.id} onClick={() => setCategory(item.id)}>{item.label}</PillButton>)}</div><div className="grid gap-4 lg:grid-cols-2">{challenges.map((challenge) => <article key={challenge.id} className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5"><h4 className="text-lg font-black">{challenge.title}</h4><div className="mt-2 flex flex-wrap gap-2 text-sm"><span className="rounded-full bg-pink-500 px-3 py-1 font-bold text-white">{challenge.category}</span><span className="rounded-full bg-purple-500 px-3 py-1 font-bold text-white">+{challenge.xp || 10} XP</span><span className="rounded-full bg-white px-3 py-1 font-bold text-gray-700 dark:bg-white/10 dark:text-gray-200">{challenge.assigned_to ? 'Osobní výzva' : 'Otevřená výzva'}</span>{challenge.completed_by && <span className="rounded-full bg-emerald-500 px-3 py-1 font-bold text-white">Bod získán</span>}</div><div className="mt-4 flex gap-2"><button onClick={() => updateChallenge(challenge.id, { accepted: !challenge.accepted })} disabled={challenge.completed} className="flex-1 rounded-2xl bg-gray-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">{challenge.accepted ? 'Odebrat' : 'Přijmout'}</button><button onClick={() => updateChallenge(challenge.id, { completed: true, accepted: true, completed_at: new Date().toISOString() })} disabled={challenge.completed} className="flex-1 rounded-2xl bg-pink-500 px-4 py-2 text-sm font-black text-white disabled:opacity-40">{challenge.completed ? 'Hotovo' : 'Splnit za sebe'}</button></div></article>)}</div></Card></div>;
 }
 
 function ChallengeEditor({ addChallenge }) {
@@ -1543,8 +1626,9 @@ function ChallengeEditor({ addChallenge }) {
   const [category, setCategory] = useState('spicy');
   const [difficulty, setDifficulty] = useState('Medium');
   const [xp, setXp] = useState(10);
-  function submit() { addChallenge({ title, category, difficulty, xp }); setTitle(''); }
-  return <Card><h3 className="mb-4 text-xl font-black">Vytvořit vlastní výzvu</h3><div className="grid gap-3 md:grid-cols-[1fr_160px_160px_120px_auto]"><TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Napiš vlastní výzvu..." /><select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{challengeCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option>Easy</option><option>Medium</option><option>Hard</option><option>Extreme</option></select><TextInput type="number" min="1" max="100" value={xp} onChange={(event) => setXp(Number(event.target.value))} /><button onClick={submit} className="rounded-2xl bg-purple-500 px-5 py-3 font-black text-white hover:bg-purple-600">Přidat</button></div></Card>;
+  const [assignedTo, setAssignedTo] = useState('open');
+  function submit() { addChallenge({ title, category, difficulty, xp, assignedTo }); setTitle(''); }
+  return <Card><h3 className="mb-4 text-xl font-black">Vytvořit vlastní výzvu</h3><div className="grid gap-3 md:grid-cols-[1fr_150px_150px_130px_110px_auto]"><TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Napiš vlastní výzvu..." /><select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{challengeCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option>Easy</option><option>Medium</option><option>Hard</option><option>Extreme</option></select><select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="open">Kdo dřív</option><option value="me">Pro mě</option></select><TextInput type="number" min="1" max="100" value={xp} onChange={(event) => setXp(Number(event.target.value))} /><button onClick={submit} className="rounded-2xl bg-purple-500 px-5 py-3 font-black text-white hover:bg-purple-600">Přidat</button></div></Card>;
 }
 
 function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, toggleKama, uploadKamaPhoto }) {
