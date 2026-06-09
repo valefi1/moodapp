@@ -494,7 +494,7 @@ async function getSignedUrl(path) {
 }
 
 function Card({ children, className = '' }) {
-  return <section className={`box-border w-full max-w-full min-w-0 rounded-[1.5rem] border border-white/70 bg-white/85 p-4 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>;
+  return <section className={`box-border w-full max-w-full min-w-0 rounded-[1.5rem] border border-white/70 bg-white/85 p-4 shadow-xl backdrop-blur-xl dark:border-fuchsia-300/10 dark:bg-white/[0.07] dark:shadow-black/30 sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>;
 }
 
 function PillButton({ active, children, onClick }) {
@@ -753,6 +753,7 @@ export default function App() {
         .eq('id', challenge.id)
         .eq('challenge_status', 'active');
       if (!error) {
+        await addSystemPost('challenge', `Výzva nebyla splněna včas: ${challenge.title} · vznikl dluh -${challenge.penalty_points || challenge.xp || 10} bodů`);
         await notifyPartner('challenge_failed', 'MoodSync', `Výzva nebyla splněna včas: ${challenge.title}. Body byly odečteny.`);
       }
     }
@@ -859,6 +860,23 @@ export default function App() {
       }
     } catch (error) {
       console.warn('Push notification failed:', error);
+    }
+  }
+
+
+
+  async function addSystemPost(type, text) {
+    if (!couple?.id || !session?.user?.id || !text) return;
+    try {
+      await supabase.from('posts').insert({
+        couple_id: couple.id,
+        author_id: session.user.id,
+        type,
+        text,
+      });
+      await loadPosts(couple.id);
+    } catch (error) {
+      console.warn('System post failed:', error.message || error);
     }
   }
 
@@ -1113,6 +1131,7 @@ export default function App() {
     });
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
+    await addSystemPost('challenge', `Nová výzva: ${payload.title.trim()} · +${Number(payload.xp) || 10} XP`);
     await notifyPartner('challenge_added', 'MoodSync', 'Partner/ka přidal/a novou výzvu.');
   }
 
@@ -1122,6 +1141,8 @@ export default function App() {
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
     if (patch.completed) {
+      const completedChallenge = challenges.find((item) => item.id === id);
+      await addSystemPost('challenge', `Výzva splněna: ${completedChallenge?.title || 'výzva'} · +${completedChallenge?.xp || 10} XP`);
       await notifyPartner('challenge_completed', 'MoodSync', 'Partner/ka splnil/a výzvu a získal/a XP.');
     }
   }
@@ -1161,7 +1182,8 @@ export default function App() {
     if (error) return setToast(`Partnera se nepodařilo vyzvat: ${error.message}`);
 
     await loadChallenges(couple.id);
-    await notifyPartner('challenge_invited', 'MoodSync', `Partner/ka tě vyzval/a: ${challenge.title}. Termín je ${formatDate(deadline)}.`);
+    await addSystemPost('challenge', `Výzva pro partnera: ${challenge.title} · limit ${hours} h · penalizace -${penalty} bodů`);
+    await notifyPartner('challenge_invited', 'MoodSync výzva', `Partner/ka tě vyzval/a: ${challenge.title}. Termín je ${formatDate(deadline)}.`);
   }
 
   async function assignDebtTask(challenge, task) {
@@ -1179,6 +1201,7 @@ export default function App() {
     if (error) return setToast(`Nápravu se nepodařilo zadat: ${error.message}`);
 
     await loadChallenges(couple.id);
+    await addSystemPost('challenge', `Náprava za nesplněnou výzvu: ${challenge.title} · ${task}`);
     await notifyPartner('debt_task_assigned', 'MoodSync', `Partner/ka ti zadal/a nápravu za nesplněnou výzvu: ${task}.`);
   }
 
@@ -1200,6 +1223,7 @@ export default function App() {
     if (error) return setToast(`Dluh se nepodařilo smazat: ${error.message}`);
 
     await loadChallenges(couple.id);
+    await addSystemPost('challenge', `Dluh smazán: ${challenge.title}`);
     await notifyPartner('debt_repaid', 'MoodSync', 'Partner/ka splnil/a nápravu a smazal/a dluh.');
   }
 
@@ -2051,19 +2075,24 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaDifficult
     .filter((position) => !oralOnly || position.type === 'Orální');
   const progressById = Object.fromEntries(kamaProgress.map((item) => [item.position_id, item]));
 
-  return <div className="grid gap-5"><Card><div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Kamasutra 2.0</div><h2 className="mt-3 text-3xl font-black sm:text-4xl">Kamasutra Journey</h2><p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, menší mobilní karty, detailnější popisy a filtry podle typu i náročnosti.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-5 text-white shadow-2xl"><div className="text-xs font-bold text-white/80">Splněno</div><div className="text-5xl font-black">{completed}</div><div className="text-sm font-bold text-white/80">z {kamaPositions.length}</div><div className="mt-3 h-3 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap items-center gap-2">{typeFilters.map((filter) => <PillButton key={filter} active={kamaFilter === filter} onClick={() => setKamaFilter(filter)}>{filter === 'all' ? 'Vše' : filter}</PillButton>)}{difficultyFilters.map((filter) => <PillButton key={filter} active={kamaDifficultyFilter === filter} onClick={() => setKamaDifficultyFilter(filter)}>{filter === 'all' ? 'Všechny úrovně' : filter}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><PoseGuide pose={position.pose} title={position.title} compact /><div className="p-3 sm:p-4"><h3 className="text-base font-black sm:text-xl">{position.title}</h3><div className="mt-2 flex flex-wrap gap-1"><span className="rounded-full bg-pink-100 px-2 py-1 text-[10px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{position.type}</span><span className="rounded-full bg-purple-100 px-2 py-1 text-[10px] font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">{position.difficulty}</span></div><div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm"><InstructionBlock number="1" title="Nastavení" text={position.description.setup} /><InstructionBlock number="2" title="Tempo" text={position.description.focus} /><InstructionBlock number="3" title="Komfort" text={position.description.comfort} /></div><button onClick={() => toggleKama(position.id)} className={`mt-3 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Splnit'}</button>{item?.completed && <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-3 py-3 text-center text-[11px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku' : 'Přidat fotku'}</label>}{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-3 h-36 w-full rounded-2xl object-cover shadow-xl" />}{item?.locked && <div className="mt-3 rounded-2xl bg-gray-900 p-3 text-center text-xs font-bold text-white"><Lock className="mx-auto mb-1" size={16} />Šifrovaná fotka</div>}</div></Card>; })}</section></div>;
+  return <div className="grid gap-5"><Card><div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Kamasutra 2.0</div><h2 className="mt-3 text-3xl font-black sm:text-4xl">Kamasutra Journey</h2><p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, menší mobilní karty, detailnější popisy a filtry podle typu i náročnosti.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-5 text-white shadow-2xl"><div className="text-xs font-bold text-white/80">Splněno</div><div className="text-5xl font-black">{completed}</div><div className="text-sm font-bold text-white/80">z {kamaPositions.length}</div><div className="mt-3 h-3 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap items-center gap-2">{typeFilters.map((filter) => <PillButton key={filter} active={kamaFilter === filter} onClick={() => setKamaFilter(filter)}>{filter === 'all' ? 'Vše' : filter}</PillButton>)}{difficultyFilters.map((filter) => <PillButton key={filter} active={kamaDifficultyFilter === filter} onClick={() => setKamaDifficultyFilter(filter)}>{filter === 'all' ? 'Všechny úrovně' : filter}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><PoseGuide pose={position.pose} title={position.title} compact /><div className="p-2.5 sm:p-4"><h3 className="text-sm font-black leading-tight sm:text-xl">{position.title}</h3><div className="mt-2 flex flex-wrap gap-1"><span className="rounded-full bg-pink-100 px-2 py-1 text-[9px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-[10px]">{position.type}</span><span className="rounded-full bg-purple-100 px-2 py-1 text-[9px] font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 sm:text-[10px]">{position.difficulty}</span></div><div className="mt-3 space-y-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm"><InstructionBlock title="Nastavení" text={position.description.setup} /><InstructionBlock title="Pohyb a tempo" text={position.description.focus} /><InstructionBlock title="Komfort" text={position.description.comfort} /></div><button onClick={() => toggleKama(position.id)} className={`mt-3 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Splnit'}</button>{item?.completed && <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-2 py-2.5 text-center text-[10px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200 sm:text-[11px]"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku' : 'Přidat fotku'}</label>}{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-3 h-28 w-full rounded-2xl object-cover shadow-xl sm:h-36" />}{item?.locked && <div className="mt-3 rounded-2xl bg-gray-900 p-3 text-center text-xs font-bold text-white"><Lock className="mx-auto mb-1" size={16} />Šifrovaná fotka</div>}</div></Card>; })}</section></div>;
 }
 
 
-function InstructionBlock({ number, title, text }) {
-  return <div className="rounded-3xl border border-gray-100 bg-white p-4 dark:border-white/10 dark:bg-white/5"><div className="flex items-start gap-3"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-pink-500 text-sm font-black text-white">{number}</div><div><div className="font-black text-gray-900 dark:text-white">{title}</div><p className="mt-1">{text}</p></div></div></div>;
+function InstructionBlock({ title, text }) {
+  return (
+    <div className="rounded-2xl border border-pink-100/70 bg-white/80 p-3 dark:border-white/10 dark:bg-white/[0.06] sm:rounded-3xl sm:p-4">
+      <div className="font-black text-gray-900 dark:text-white">{title}</div>
+      <p className="mt-1 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm">{text}</p>
+    </div>
+  );
 }
 
 function PoseGuide({ pose, title, compact = false }) {
   const guides = { 'seated-face': { icon: Heart, label: 'Romantická blízkost' }, 'side-spoon': { icon: Moon, label: 'Pomalá intimita' }, 'edge-bed': { icon: Flame, label: 'Intenzivní energie' }, 'standing-mirror': { icon: Sparkles, label: 'Flirt a teasing' }, 'top-facing': { icon: Trophy, label: 'Partnerka vede tempo' }, 'kneeling-arch': { icon: Flame, label: 'Silná intenzita' }, tabletop: { icon: Sparkles, label: 'Hravá změna prostředí' }, 'side-facing': { icon: Moon, label: 'Jemné propojení' } };
   const guide = guides[pose] || { icon: Heart, label: 'Intimní moment' };
   const Icon = guide.icon;
-  return <div className={`bg-[#fff7f3] dark:bg-[#120d18] ${compact ? 'p-3' : 'p-5'}`}><div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-pink-200 bg-gradient-to-br from-pink-50 to-rose-50 p-3 text-center dark:border-pink-500/20 dark:from-pink-500/5 dark:to-purple-500/5 sm:p-6"><div className={`${compact ? 'h-10 w-10 sm:h-12 sm:w-12' : 'h-20 w-20'} flex items-center justify-center rounded-full bg-white shadow-xl dark:bg-white/10`}><Icon className="text-pink-500" size={compact ? 20 : 36} /></div><div className={`${compact ? 'mt-2 text-xs sm:text-sm' : 'mt-4 text-xl'} font-black text-gray-900 dark:text-white`}>{title}</div><div className="mt-2 rounded-full bg-pink-100 px-3 py-1 text-[10px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-xs">{guide.label}</div></div></div>;
+  return <div className={`bg-[#fff7f3] dark:bg-[#120d18] ${compact ? 'p-2' : 'p-5'}`}><div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-pink-200 bg-gradient-to-br from-pink-50 to-rose-50 p-2 text-center dark:border-fuchsia-400/20 dark:from-pink-500/10 dark:to-purple-500/10 sm:rounded-3xl sm:p-4"><div className={`${compact ? 'h-8 w-8 sm:h-10 sm:w-10' : 'h-20 w-20'} flex items-center justify-center rounded-2xl bg-white shadow-lg dark:bg-white/10`}><Icon className="text-pink-500" size={compact ? 16 : 36} /></div><div className={`${compact ? 'mt-1.5 text-[11px] leading-tight sm:text-xs' : 'mt-4 text-xl'} font-black text-gray-900 dark:text-white`}>{title}</div><div className="mt-1 rounded-full bg-pink-100 px-2 py-1 text-[9px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-[10px]">{guide.label}</div></div></div>;
 }
 
 function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartnerName, updateProfileName, uploadCoupleAvatar, encryptionPassphrase, saveEncryptionPassphrase, signOut }) {
