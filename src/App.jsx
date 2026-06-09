@@ -8,6 +8,7 @@ import {
   ZapOff,
   Award,
   Bell,
+  Clock,
   Copy,
   Flame,
   Gift,
@@ -24,6 +25,7 @@ import {
   Star,
   Sun,
   Trophy,
+  Target,
   User,
   Users,
   Wand2,
@@ -53,6 +55,11 @@ const moods = [
 
 function getMoodByLabel(label) {
   return moods.find((mood) => mood.label === label) || moods[0];
+}
+
+function isStatusFresh(status) {
+  if (!status?.updated_at) return false;
+  return Date.now() - new Date(status.updated_at).getTime() < 24 * 60 * 60 * 1000;
 }
 
 const photoCategories = [
@@ -220,147 +227,56 @@ function normalizeStarterChallenge(challenge, coupleId, index = 0, userId = null
 }
 
 const kamaPositions = [
-  { id: 'kama-31', title: 'Jemný déšť', pose: 'side-facing', category: 'Romantic', difficulty: 'Easy', xp: 16, description: { setup: 'Ležení bokem velmi blízko u sebe.', focus: 'Pomalé tempo a dlouhé doteky.', comfort: 'Použijte měkké polštáře pod hlavu.' } },
-  { id: 'kama-32', title: 'Venušin polibek', pose: 'side-facing', category: 'Oral', difficulty: 'Medium', xp: 30, description: { setup: 'Partneři leží proti sobě v pohodlné poloze.', focus: 'Vzájemné uspokojování a komunikace.', comfort: 'Začněte pomalu a střídejte tempo.' } },
-  { id: 'kama-33', title: 'Královna', pose: 'top-facing', category: 'Rider', difficulty: 'Medium', xp: 32, description: { setup: 'Partnerka nahoře v dominantnější poloze.', focus: 'Kontrola rytmu a intenzity.', comfort: 'Držte stabilitu boků.' } },
-  { id: 'kama-34', title: 'Noční objetí', pose: 'side-spoon', category: 'Soft', difficulty: 'Easy', xp: 14, description: { setup: 'Klasická poloha na lžičku.', focus: 'Blízkost a jemnost.', comfort: 'Vhodné i pro delší chvíle.' } },
-  { id: 'kama-35', title: 'Hvězdný prach', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 40, description: { setup: 'Poloha ve stoje s oporou.', focus: 'Silná chemie a kontakt očí.', comfort: 'Použijte zeď pro jistotu.' } },
-  { id: 'kama-36', title: 'Samet', pose: 'edge-bed', category: 'Classic', difficulty: 'Easy', xp: 18, description: { setup: 'Ležící klasická pozice.', focus: 'Pomalý rytmus.', comfort: 'Uvolněte boky i stehna.' } },
-  { id: 'kama-37', title: 'Polární záře', pose: 'side-facing', category: 'Romantic', difficulty: 'Medium', xp: 24, description: { setup: 'Bokem k sobě s propletenýma nohama.', focus: 'Mazlení a teasing.', comfort: 'Netlačte na ramena.' } },
-  { id: 'kama-38', title: 'Tango', pose: 'standing-mirror', category: 'Standing', difficulty: 'Medium', xp: 34, description: { setup: 'Stojící poloha s těsným kontaktem.', focus: 'Rytmus a dominance.', comfort: 'Držte rovnováhu.' } },
-  { id: 'kama-39', title: 'Čokoláda', pose: 'seated-face', category: 'Oral', difficulty: 'Easy', xp: 24, description: { setup: 'Pohodlné sezení nebo klek.', focus: 'Orální stimulace a teasing.', comfort: 'Používejte pohodlnou oporu.' } },
-  { id: 'kama-40', title: 'Harmonie', pose: 'side-facing', category: 'Soft', difficulty: 'Easy', xp: 15, description: { setup: 'Klidná poloha bokem.', focus: 'Synchronizace pohybů.', comfort: 'Ideální pro pomalé tempo.' } },
-  { id: 'kama-41', title: 'Mléčná dráha', pose: 'top-facing', category: 'Passion', difficulty: 'Hard', xp: 44, description: { setup: 'Aktivní poloha nahoře.', focus: 'Intenzita a rytmus.', comfort: 'Pravidelně měňte tempo.' } },
-  { id: 'kama-42', title: 'Pokušení', pose: 'tabletop', category: 'Front', difficulty: 'Medium', xp: 30, description: { setup: 'Poloha na hraně postele nebo stolu.', focus: 'Hravost a vizuální kontakt.', comfort: 'Použijte stabilní povrch.' } },
-  { id: 'kama-43', title: 'Karamel', pose: 'edge-bed', category: 'Oral', difficulty: 'Medium', xp: 28, description: { setup: 'Pohodlná poloha pro orální hrátky.', focus: 'Pomalejší intenzivní stimulace.', comfort: 'Komunikujte tempo.' } },
-  { id: 'kama-44', title: 'Zen', pose: 'side-spoon', category: 'Soft', difficulty: 'Easy', xp: 12, description: { setup: 'Ležení za sebou.', focus: 'Relax a intimita.', comfort: 'Bez tlaku na záda.' } },
-  { id: 'kama-45', title: 'Magnet', pose: 'seated-face', category: 'Romantic', difficulty: 'Medium', xp: 26, description: { setup: 'Sedící objetí čelem k sobě.', focus: 'Oční kontakt a blízkost.', comfort: 'Opřete se o čelo postele.' } },
-  { id: 'kama-46', title: 'Pírko', pose: 'side-facing', category: 'Romantic', difficulty: 'Easy', xp: 14, description: { setup: 'Lehká a jemná poloha.', focus: 'Doteky a teasing.', comfort: 'Nechte tělo úplně uvolněné.' } },
-  { id: 'kama-47', title: 'Bouře', pose: 'kneeling-arch', category: 'Passion', difficulty: 'Hard', xp: 46, description: { setup: 'Dynamická poloha zezadu.', focus: 'Silnější tempo.', comfort: 'Podložte kolena.' } },
-  { id: 'kama-48', title: 'Vanilka', pose: 'edge-bed', category: 'Classic', difficulty: 'Easy', xp: 10, description: { setup: 'Jednoduchá pohodlná poloha.', focus: 'Pomalý kontakt.', comfort: 'Vhodné pro začátečníky.' } },
-  { id: 'kama-49', title: 'Med', pose: 'side-facing', category: 'Oral', difficulty: 'Easy', xp: 22, description: { setup: 'Ležící poloha pro orální kontakt.', focus: 'Jemné tempo a teasing.', comfort: 'Pohodlný polštář pod hlavou.' } },
-  { id: 'kama-50', title: 'Infinity', pose: 'top-facing', category: 'Rider', difficulty: 'Hard', xp: 48, description: { setup: 'Aktivní poloha s pohybem boků.', focus: 'Kontrola a intenzita.', comfort: 'Nepřetěžujte kolena.' } },
-
-  {
-    id: 'kama-1', title: 'Lotus', pose: 'seated-face', category: 'Romantic', difficulty: 'Medium', xp: 25,
-    description: { setup: 'Partner sedí stabilně a partnerka se posadí do jeho klína čelem k němu.', focus: 'Pomalé tempo, objetí, líbání a oční kontakt.', comfort: 'Opřete záda o čelo postele nebo polštář.' },
-  },
-  {
-    id: 'kama-2', title: 'Misionář', pose: 'edge-bed', category: 'Classic', difficulty: 'Easy', xp: 10,
-    description: { setup: 'Partnerka leží na zádech a partner je nahoře mezi jejíma nohama.', focus: 'Blízkost tváří, snadná komunikace a pomalé ladění rytmu.', comfort: 'Polštář pod boky může zlepšit úhel a pohodlí.' },
-  },
-  {
-    id: 'kama-3', title: 'Na pejska', pose: 'kneeling-arch', category: 'Passion', difficulty: 'Medium', xp: 25,
-    description: { setup: 'Partnerka je na kolenou s oporou rukou, partner je za ní.', focus: 'Silnější energie, kontrola tempa a hlubší úhel.', comfort: 'Podložte kolena a průběžně komunikujte tempo.' },
-  },
-  {
-    id: 'kama-4', title: 'Kovbojka', pose: 'top-facing', category: 'Passion', difficulty: 'Medium', xp: 30,
-    description: { setup: 'Partner leží na zádech a partnerka sedí nahoře čelem k němu.', focus: 'Partnerka ovládá tempo, úhel a hloubku pohybu.', comfort: 'Ruce mohou být opřené o hrudník, stehna nebo matraci.' },
-  },
-  {
-    id: 'kama-5', title: 'Obrácená kovbojka', pose: 'top-facing', category: 'Spicy', difficulty: 'Medium', xp: 35,
-    description: { setup: 'Partner leží na zádech a partnerka sedí nahoře zády k němu.', focus: 'Vizuální teasing a jiný úhel kontaktu.', comfort: 'Začněte pomalu a držte stabilitu v kolenou.' },
-  },
-  {
-    id: 'kama-6', title: 'Lžička', pose: 'side-spoon', category: 'Soft', difficulty: 'Easy', xp: 15,
-    description: { setup: 'Oba leží na boku za sebou, partner je zezadu přitisknutý k partnerce.', focus: 'Jemnost, ranní intimita a dlouhý tělesný kontakt.', comfort: 'Polštář mezi koleny uleví kyčlím i bedrům.' },
-  },
-  {
-    id: 'kama-7', title: 'Motýlek', pose: 'edge-bed', category: 'Passion', difficulty: 'Hard', xp: 40,
-    description: { setup: 'Partnerka leží na kraji postele, partner stojí nebo klečí před ní.', focus: 'Přesnější kontrola úhlu a intenzity.', comfort: 'Stabilní okraj postele a podpora beder jsou zásadní.' },
-  },
-  {
-    id: 'kama-8', title: 'Svíčka', pose: 'standing-mirror', category: 'Standing', difficulty: 'Medium', xp: 30,
-    description: { setup: 'Oba stojí velmi blízko u sebe, těla jsou lehce natočená.', focus: 'Malé pohyby boků, kontakt rukama a spontánní energie.', comfort: 'Vhodné u zdi nebo zrcadla, aby byla opora jistá.' },
-  },
-  {
-    id: 'kama-9', title: 'Háček', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 38,
-    description: { setup: 'Ve stoje se partnerka jednou nohou zahákne kolem partnera nebo se o něj opře.', focus: 'Těsné propojení, intenzivní kontakt a pocit spontánnosti.', comfort: 'Použijte zeď jako oporu a nepřetěžujte stojnou nohu.' },
-  },
-  {
-    id: 'kama-10', title: 'Oheň', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 45,
-    description: { setup: 'Stojící varianta tváří v tvář, partner partnerku podpírá a vede její náklon.', focus: 'Vášnivá, taneční energie a silný vizuální kontakt.', comfort: 'Nedělejte zvedání bez jistoty a držte krátké intervaly.' },
-  },
-  {
-    id: 'kama-11', title: 'Pevné objetí', pose: 'side-facing', category: 'Soft', difficulty: 'Easy', xp: 18,
-    description: { setup: 'Ležíte na boku čelem nebo lehce bokem k sobě, těla jsou blízko.', focus: 'Mazlení, líbání, hlazení a pocit bezpečí.', comfort: 'Upravte ramena a kyčle tak, aby nikdo neležel na ruce.' },
-  },
-  {
-    id: 'kama-12', title: 'Nekonečná slast', pose: 'side-facing', category: 'Side', difficulty: 'Medium', xp: 28,
-    description: { setup: 'Bokem k sobě, jedna noha partnerky je výš nebo zachycená přes partnera.', focus: 'Hledání příjemného úhlu a pomalý, smyslný pohyb.', comfort: 'Netlačte na kyčle a nechte kolena volná.' },
-  },
-  {
-    id: 'kama-13', title: 'Mexický styl', pose: 'seated-face', category: 'Rider', difficulty: 'Medium', xp: 28,
-    description: { setup: 'Partner sedí v křesle nebo na pevné židli, partnerka si sedá do klína.', focus: 'Pohodlné vedení tempa partnerkou a volné ruce pro doteky.', comfort: 'Použijte stabilní židli bez koleček.' },
-  },
-  {
-    id: 'kama-14', title: 'Vzdušný jezdec', pose: 'seated-face', category: 'Rider', difficulty: 'Hard', xp: 42,
-    description: { setup: 'Partnerka nahoře více objímá partnera nohama a váha je částečně sdílená.', focus: 'Silný pocit propojení a větší fyzická intenzita.', comfort: 'Náročnější na sílu; držte krátce a bezpečně.' },
-  },
-  {
-    id: 'kama-15', title: 'Španělský západ slunce', pose: 'top-facing', category: 'Rider', difficulty: 'Medium', xp: 34,
-    description: { setup: 'Varianta nahoře zády k partnerovi, partner má dobrou oporu zad.', focus: 'Partnerka vede pohyb a partner má volné ruce pro doteky.', comfort: 'Držte plynulé tempo a chraňte kolena.' },
-  },
-  {
-    id: 'kama-16', title: 'Šéfkuchař', pose: 'tabletop', category: 'Front', difficulty: 'Medium', xp: 30,
-    description: { setup: 'Partnerka sedí na stabilním stole nebo hraně linky, partner stojí před ní.', focus: 'Hravost, změna prostředí a přímý kontakt tváří v tvář.', comfort: 'Povrch musí být pevný a bez kluzkých hran.' },
-  },
-  {
-    id: 'kama-17', title: 'Zajetí', pose: 'edge-bed', category: 'Front', difficulty: 'Hard', xp: 40,
-    description: { setup: 'Partnerka leží na okraji postele s boky blízko hrany, partner je před ní.', focus: 'Vášnivější úhel a pocit oddání se momentu.', comfort: 'Hlava, záda i krk musí mít bezpečnou oporu.' },
-  },
-  {
-    id: 'kama-18', title: 'Ještěrky', pose: 'edge-bed', category: 'Front', difficulty: 'Easy', xp: 16,
-    description: { setup: 'Oba jsou nízko u sebe v pohodlné ležící pozici.', focus: 'Klid, doteky, blízkost a minimum akrobacie.', comfort: 'Skvělé pro pomalé tempo a delší intimní chvíli.' },
-  },
-  {
-    id: 'kama-19', title: 'Klapka', pose: 'kneeling-arch', category: 'Back', difficulty: 'Medium', xp: 30,
-    description: { setup: 'Partnerka je níž a více schoulená, partner je za ní s oporou rukou.', focus: 'Zadní vstup s větší kontrolou tempa partnerem.', comfort: 'Nesmí tlačit na krk ani ramena; podložte kolena.' },
-  },
-  {
-    id: 'kama-20', title: 'Krab', pose: 'side-facing', category: 'Back', difficulty: 'Medium', xp: 32,
-    description: { setup: 'Těla jsou propletená bokem nebo zezadu s možností objímání.', focus: 'Smyslné vinutí těl, ruce volné pro hlazení.', comfort: 'Pomalé změny úhlu jsou lepší než prudký pohyb.' },
-  },
-  {
-    id: 'kama-21', title: 'Líní psi', pose: 'edge-bed', category: 'Back', difficulty: 'Medium', xp: 28,
-    description: { setup: 'Oba partneři jsou nízko u sebe, těla kopírují podobnou ležící pozici.', focus: 'Tělesná blízkost, pomalejší rytmus a kontakt celou vahou.', comfort: 'Horní partner nesmí tlačit celou vahou dolů.' },
-  },
-  {
-    id: 'kama-22', title: 'Kruh 69', pose: 'side-facing', category: 'Oral', difficulty: 'Medium', xp: 35,
-    description: { setup: 'Partneři jsou natočení proti sobě tak, aby se mohli vzájemně uspokojovat ústy.', focus: 'Vzájemnost, pomalé tempo a jasná komunikace.', comfort: 'Poloha na boku je bezpečnější a méně namáhavá než nahoře/dole.' },
-  },
-  {
-    id: 'kama-23', title: 'Mořská panna', pose: 'edge-bed', category: 'Classic', difficulty: 'Medium', xp: 26,
-    description: { setup: 'Partnerka leží s nohama více u sebe nebo lehce natočenými do strany.', focus: 'Těsnější kontakt a elegantnější, pomalejší pohyb.', comfort: 'Nevytáčejte kolena ani kyčle do bolesti.' },
-  },
-  {
-    id: 'kama-24', title: 'Vodopád', pose: 'edge-bed', category: 'Advanced', difficulty: 'Hard', xp: 45,
-    description: { setup: 'Ležící varianta na kraji postele s výraznějším náklonem těla.', focus: 'Pocit uvolnění a intenzivnější úhel.', comfort: 'Krk a záda musí být podepřené; není vhodné držet dlouho.' },
-  },
-  {
-    id: 'kama-25', title: 'Bambusový výhonek', pose: 'edge-bed', category: 'Classic', difficulty: 'Medium', xp: 30,
-    description: { setup: 'Partnerka leží na zádech a jedna noha je výš, opřená o partnera.', focus: 'Změna úhlu, lepší kontrola intenzity a blízký kontakt.', comfort: 'Noha musí být uvolněná, ne přetažená.' },
-  },
-  {
-    id: 'kama-26', title: 'U zdi', pose: 'standing-mirror', category: 'Standing', difficulty: 'Hard', xp: 42,
-    description: { setup: 'Partnerka se opírá o zeď, partner je těsně před nebo za ní.', focus: 'Spontánní, vášnivá energie a pevné držení.', comfort: 'Použijte zeď jako oporu, ne jako tlak do zad.' },
-  },
-  {
-    id: 'kama-27', title: 'Houpačka', pose: 'seated-face', category: 'Rider', difficulty: 'Hard', xp: 44,
-    description: { setup: 'Sedící varianta, kde partnerka v klíně mění rytmus dopředu a dozadu.', focus: 'Hravý pohyb, smích a experimentování s rytmem.', comfort: 'Potřebuje stabilní sed a dobrou rovnováhu.' },
-  },
-  {
-    id: 'kama-28', title: 'Obkročmo', pose: 'top-facing', category: 'Rider', difficulty: 'Easy', xp: 20,
-    description: { setup: 'Partnerka obkročí partnera nahoře nebo v sedě.', focus: 'Jednoduchá kontrola tempa a blízké doteky.', comfort: 'Nechte kolena volná a měňte úhel pánve.' },
-  },
-  {
-    id: 'kama-29', title: 'Pravý úhel', pose: 'tabletop', category: 'Front', difficulty: 'Medium', xp: 34,
-    description: { setup: 'Těla svírají výraznější úhel, typicky u hrany postele nebo stolu.', focus: 'Přesný kontakt a snadné vedení boků.', comfort: 'Vyberte stabilní výšku povrchu.' },
-  },
-  {
-    id: 'kama-30', title: 'Tulipán', pose: 'side-facing', category: 'Romantic', difficulty: 'Easy', xp: 18,
-    description: { setup: 'Ležící měkká pozice s nohama a rukama přirozeně propletenými.', focus: 'Romantika, pomalost a pocit bezpečí.', comfort: 'Vhodné pro delší chvíle bez velké námahy.' },
-  },
+  { id: "kama-1", title: "Vodnář", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 34, tag: "Romantické", description: { setup: "Partnerka leží na zádech, zvedne boky a podepře je rukama nebo polštářem. Partner klečí mezi jejími nohami a pomáhá jí držet stabilní úhel pánve.", focus: "Poloha je vhodná pro páry, které chtějí kombinovat intenzivnější kontakt s dobrým výhledem na sebe navzájem. Tempo by mělo začínat pomalu a postupně se ladit podle pohodlí.", comfort: "Dbejte na oporu beder a krku. Pokud se partnerce začne napínat spodní část zad, snižte úhel boků nebo přejděte do jednodušší varianty." } },
+  { id: "kama-2", title: "Kyvadlo", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 30, tag: "Romantické", description: { setup: "Partner leží na zádech s lehce pokrčenými koleny. Partnerka je nahoře tváří k němu, opírá se jednou rukou o podložku a druhou o jeho hrudník.", focus: "Partnerka přebírá vedení a volí jemné, plynulé pohyby boků. Poloha se hodí jako klidnější mezihra mezi náročnějšími pozicemi.", comfort: "Partner může pomáhat rukama na jejích bocích. Pohyb by měl být spíš plynulý než silový, aby se zbytečně nepřetěžovala kolena." } },
+  { id: "kama-3", title: "Lotos", pose: "seated-face", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 28, tag: "Romantické", description: { setup: "Partner sedí opřený o čelo postele nebo zeď. Partnerka si sedne do jeho klína čelem k němu a obemkne ho nohama kolem pasu.", focus: "Tahle poloha je o blízkosti, dechu, polibcích a očním kontaktu. Hodí se pro pomalou intimitu, kdy nejde o výkon, ale o propojení.", comfort: "Opřete záda a boky polštáři. Když začne bolet spodní část zad, změňte úhel sedu nebo přejděte do lehu." } },
+  { id: "kama-4", title: "Motýl", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 32, tag: "Vášnivé", description: { setup: "Partnerka leží na kraji postele, boky má blízko hrany a nohy pohodlně pokrčené. Partner stojí nebo klečí před ní.", focus: "Umožňuje dobře řídit úhel a tempo. Hodí se pro chvíle, kdy chcete intenzivnější kontakt, ale stále pohodlnou oporu.", comfort: "Hrana postele musí být stabilní. Bedra podložte polštářem a domluvte si signál pro zpomalení." } },
+  { id: "kama-5", title: "Lžička", pose: "side-spoon", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 18, tag: "Romantické", description: { setup: "Oba leží na boku za sebou. Zadní partner se přitiskne k partnerce a obejme ji kolem pasu nebo hrudníku.", focus: "Jemná poloha pro ranní nebo večerní intimitu. Funguje skvěle, když chcete hodně blízkosti bez fyzické námahy.", comfort: "Polštář mezi koleny uvolní kyčle a bedra. Tempo držte klidné a upravujte náklon boků." } },
+  { id: "kama-6", title: "Kovbojka", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 30, tag: "Vášnivé", description: { setup: "Partner leží na zádech a partnerka sedí nahoře čelem k němu. Může být vzpřímená nebo lehce předkloněná.", focus: "Partnerka ovládá rytmus, tlak i hloubku a partner má prostor vnímat její tempo. Poloha je dobrá pro komunikaci a kontrolu.", comfort: "Nepřetěžujte kolena. Partnerka se může opřít o hrudník, stehna nebo matraci." } },
+  { id: "kama-7", title: "Obrácená kovbojka", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 36, tag: "Vášnivé", description: { setup: "Partner leží na zádech, partnerka sedí nahoře zády k němu a opírá se o stehna nebo matraci.", focus: "Varianta přináší odlišný úhel a výraznější vizuální teasing. Tempo by měla partnerka držet pod kontrolou.", comfort: "Začínejte pomalu a vyhýbejte se prudkým pohybům. Stabilita kolen a beder je zásadní." } },
+  { id: "kama-8", title: "Kolébka", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 20, tag: "Romantické", description: { setup: "Oba leží čelem k sobě na boku. Nohy jsou jemně propletené a těla zůstávají v těsném kontaktu.", focus: "Poloha je vhodná pro pomalé mazlení, polibky a komunikaci. Pomáhá, když chcete intimitu bez tlaku na výkon.", comfort: "Upravte ramena tak, aby nikdo neležel na ruce. Polštář pod hlavou výrazně zlepší pohodlí." } },
+  { id: "kama-9", title: "Amazonka", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 40, tag: "Vášnivé", description: { setup: "Partner leží nebo sedí níže a partnerka je nahoře v dominantnější pozici s větší kontrolou boků.", focus: "Silná poloha pro partnerku, která chce převzít vedení. Hodí se pro hravé střídání tempa a dominance.", comfort: "Držte stabilní oporu rukama. Pokud se objeví tlak v kolenou, zkraťte interval nebo změňte pozici." } },
+  { id: "kama-10", title: "Sfinga", pose: "kneeling-arch", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 28, tag: "Vášnivé", description: { setup: "Partnerka leží nízko na břiše nebo se opírá o lokty, boky má mírně zvednuté. Partner je za ní.", focus: "Poloha kombinuje těsný kontakt s klidnějším tempem. Je vhodná, když chcete intenzitu bez velké akrobacie.", comfort: "Podložte boky a nepřetěžujte bedra. Pohyb by měl zůstat plynulý a kontrolovaný." } },
+  { id: "kama-11", title: "Most", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 45, tag: "Akčnější", description: { setup: "Partnerka zvedá boky do mírného mostu s oporou ramen nebo předloktí. Partner ji drží za boky a pomáhá stabilizovat.", focus: "Krátká intenzivnější poloha pro páry, které chtějí silnější úhel a fyzickou výzvu.", comfort: "Nedržte dlouho. Při tlaku v zádech nebo krku okamžitě přejděte do jednodušší varianty." } },
+  { id: "kama-12", title: "Pravý úhel", pose: "tabletop", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 34, tag: "Vášnivé", description: { setup: "Partnerka sedí nebo leží na hraně pevné postele či stolu, partner stojí nebo klečí před ní.", focus: "Dobře se nastavuje výška a úhel. Poloha působí spontánně a zároveň dává oběma jasnou oporu.", comfort: "Použijte pouze stabilní povrch. Pozor na ostré hrany a kluzké materiály." } },
+  { id: "kama-13", title: "Tulipán", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 18, tag: "Romantické", description: { setup: "Ležící měkká poloha s volně propletenýma nohama. Těla zůstávají blízko bez nutnosti držet napětí.", focus: "Vhodná pro romantický večer, pomalý rytmus a dlouhé doteky.", comfort: "Nechte kolena a kyčle uvolněné. Když něco táhne, změňte úhel nohou." } },
+  { id: "kama-14", title: "Houpačka", pose: "seated-face", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 42, tag: "Hravé", description: { setup: "Partner sedí stabilně a partnerka je v jeho klíně. Pohyb vychází spíš z přenášení váhy dopředu a dozadu.", focus: "Hravá poloha, která dobře funguje s hudbou, smíchem a pomalým zkoušením rytmu.", comfort: "Použijte pevný sed bez koleček. Pokud je rovnováha nejistá, vraťte se do jednoduššího lotosu." } },
+  { id: "kama-15", title: "Mořská panna", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 26, tag: "Romantické", description: { setup: "Partnerka leží na zádech s nohama blíže u sebe nebo lehce natočenými do strany. Partner je před ní.", focus: "Poloha vytváří těsnější kontakt a elegantnější pomalý rytmus. Hodí se pro klidnější intimní chvíle.", comfort: "Nevytáčejte kolena do bolesti. Polštář pod boky může pomoci s pohodlným úhlem." } },
+  { id: "kama-16", title: "Bambusový výhonek", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 30, tag: "Vášnivé", description: { setup: "Partnerka leží na zádech a jednu nohu opře výš o partnera nebo jeho rameno. Druhá zůstává uvolněná.", focus: "Umožňuje změnit úhel a prohloubit kontakt bez velké změny polohy.", comfort: "Noha musí být uvolněná. Pokud táhne stehno nebo kyčel, okamžitě ji položte níž." } },
+  { id: "kama-17", title: "U zdi", pose: "standing-mirror", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 42, tag: "Akčnější", description: { setup: "Partnerka se opírá zády nebo rukama o zeď, partner stojí těsně u ní a pomáhá držet stabilitu.", focus: "Spontánní poloha s vášnivou energií, vhodná spíš na kratší intenzivní chvíle.", comfort: "Zeď používejte jako oporu, ne pro tlak do zad. Vyhněte se zvedání bez jistoty." } },
+  { id: "kama-18", title: "Tanečnice", pose: "standing-mirror", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 38, tag: "Hravé", description: { setup: "Ve stoje se partnerka jednou nohou opře nebo zahákne kolem partnera. Partner ji přidržuje za boky.", focus: "Poloha působí jako tanec a vyžaduje souhru, rytmus a důvěru.", comfort: "Držte pomalé tempo a stabilní oporu. Není vhodná při únavě nebo kluzké podlaze." } },
+  { id: "kama-19", title: "Klapka", pose: "kneeling-arch", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 30, tag: "Vášnivé", description: { setup: "Partnerka je v kleku níže u podložky, opírá se o předloktí. Partner je za ní a drží pohyb kontrolovaně.", focus: "Zadní varianta s větší kontrolou tempa a těsným kontaktem.", comfort: "Podložte kolena a předloktí. Krk musí zůstat uvolněný." } },
+  { id: "kama-20", title: "Krab", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 32, tag: "Hravé", description: { setup: "Těla jsou bokem částečně propletená, nohy vytvářejí stabilní oporu a ruce zůstávají volné.", focus: "Hravé hledání úhlu, které může být překvapivě intimní a pohodlné.", comfort: "Nespěchejte. Upravujte nohy postupně, aby nevznikal tlak v kyčlích." } },
+  { id: "kama-21", title: "Líní psi", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 20, tag: "Soft", description: { setup: "Oba jsou nízko u sebe, horní partner se opírá tak, aby neležel celou vahou na partnerce.", focus: "Klidná poloha pro pomalejší tempo a tělesnou blízkost.", comfort: "Váhu rozložte na ruce nebo lokty. Přestávky jsou součástí pohodlí." } },
+  { id: "kama-22", title: "Vodopád", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 44, tag: "Akčnější", description: { setup: "Ležící varianta na kraji postele s výraznějším náklonem těla a vyšší oporou boků.", focus: "Poloha mění perspektivu i úhel a hodí se pro páry, které rády experimentují.", comfort: "Krk a záda musí být bezpečně podepřené. Nedržte polohu dlouho." } },
+  { id: "kama-23", title: "Pevné objetí", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 18, tag: "Romantické", description: { setup: "Partneři leží velmi blízko a drží se v objetí. Nohy jsou jen lehce propletené.", focus: "Cílem je klid, bezpečí a společný rytmus dechu.", comfort: "Upravte ramena a hlavu tak, aby nikdo neležel nepohodlně." } },
+  { id: "kama-24", title: "Mexický styl", pose: "seated-face", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 28, tag: "Hravé", description: { setup: "Partner sedí na pevné židli nebo kraji postele, partnerka si sedá do klína.", focus: "Volné ruce, blízký kontakt a dobrá kontrola rytmu partnerkou.", comfort: "Židle musí být stabilní a bez koleček. Chodidla držte pevně na zemi." } },
+  { id: "kama-25", title: "Vzdušný jezdec", pose: "seated-face", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 42, tag: "Akčnější", description: { setup: "Varianta sedu, kde partnerka více zapojuje nohy a drží se blízko partnera.", focus: "Fyzicky náročnější poloha s pocitem intenzivního propojení.", comfort: "Dělejte ji krátce a nepřepínejte sílu stehen nebo beder." } },
+  { id: "kama-26", title: "Šéfkuchař", pose: "tabletop", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 30, tag: "Hravé", description: { setup: "Partnerka sedí na stabilní hraně linky nebo stolu, partner stojí mezi jejími nohami.", focus: "Změna prostředí, hravost a přímý kontakt tváří v tvář.", comfort: "Stůl musí být pevný. Pozor na hrany a předměty kolem." } },
+  { id: "kama-27", title: "Zajetí", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 40, tag: "Vášnivé", description: { setup: "Partnerka leží blízko okraje postele, boky jsou podepřené a partner přebírá větší část vedení.", focus: "Vášnivější poloha s pocitem odevzdání a intenzivnějším úhlem.", comfort: "Hlava, krk a bedra musí mít oporu. Domluvte si tempo předem." } },
+  { id: "kama-28", title: "Ještěrky", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 16, tag: "Soft", description: { setup: "Oba partneři jsou nízko u sebe v ležící poloze, kde se těla přirozeně kopírují.", focus: "Minimum akrobacie, hodně tělesného kontaktu a klidné tempo.", comfort: "Skvělá volba při únavě. Stačí měnit malé úhly boků." } },
+  { id: "kama-29", title: "Venušin polibek", pose: "side-facing", category: "Orální", type: "Orální", difficulty: "Středně pokročilé", xp: 30, tag: "Orální", description: { setup: "Partneři leží pohodlně proti sobě nebo bokem tak, aby měli stabilní oporu hlavy a ramen.", focus: "Poloha je zaměřená na vzájemnou pozornost, pomalost a citlivou komunikaci.", comfort: "Použijte polštáře a domluvte si jednoduchý signál pro pauzu nebo změnu." } },
+  { id: "kama-30", title: "Kruh 69", pose: "side-facing", category: "Orální", type: "Orální", difficulty: "Středně pokročilé", xp: 35, tag: "Orální", description: { setup: "Partneři jsou natočení proti sobě tak, aby si mohli vzájemně dopřát orální stimulaci v pohodlné poloze.", focus: "Důležitá je souhra, pomalost a střídání intenzity podle reakcí.", comfort: "Varianta na boku je méně namáhavá než nad sebou a lépe se v ní dýchá." } },
+  { id: "kama-31", title: "Med", pose: "side-facing", category: "Orální", type: "Orální", difficulty: "Začátečníci", xp: 22, tag: "Orální", description: { setup: "Ležící poloha pro jemné orální hrátky s pohodlnou oporou hlavy a ramen.", focus: "Hodí se pro pomalý teasing a budování atmosféry bez spěchu.", comfort: "Držte pohodlný úhel krku a pravidelně měňte polohu hlavy." } },
+  { id: "kama-32", title: "Čokoláda", pose: "seated-face", category: "Orální", type: "Orální", difficulty: "Začátečníci", xp: 24, tag: "Orální", description: { setup: "Jeden partner pohodlně sedí nebo leží s oporou, druhý má dost prostoru pro jemný orální kontakt.", focus: "Poloha je hravá, intimní a dobře kombinuje doteky s komunikací.", comfort: "Vyhněte se tlaku na krk. Pohodlná opora je důležitější než výdrž." } },
+  { id: "kama-33", title: "Karamel", pose: "edge-bed", category: "Orální", type: "Orální", difficulty: "Středně pokročilé", xp: 28, tag: "Orální", description: { setup: "Partnerka nebo partner leží u hrany postele, druhý partner klečí nebo sedí tak, aby byl pohodlně ve správné výšce.", focus: "Vhodné pro soustředěnou pozornost a pomalejší intenzivní stimulaci.", comfort: "Podložte kolena a krk. Komunikujte tempo i tlak." } },
+  { id: "kama-34", title: "Pírko", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 14, tag: "Romantické", description: { setup: "Lehká poloha s uvolněnými těly a minimem fyzické námahy.", focus: "Zaměřuje se na doteky, mazlení a jemné budování napětí.", comfort: "Uvolněte ramena, boky i stehna. Ideální pro dlouhé předehry." } },
+  { id: "kama-35", title: "Bouře", pose: "kneeling-arch", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 46, tag: "Vášnivé", description: { setup: "Dynamická poloha zezadu v kleku s jasnou oporou rukou.", focus: "Hodí se pro energičtější chvíle, kde je důležitá důvěra a komunikace.", comfort: "Podložte kolena, nepřetěžujte zápěstí a domluvte si tempo." } },
+  { id: "kama-36", title: "Vanilka", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 10, tag: "Soft", description: { setup: "Jednoduchá pohodlná poloha tváří v tvář s dobrou oporou zad.", focus: "Pomalý kontakt, snadná komunikace a minimum fyzické náročnosti.", comfort: "Dobrá volba pro začátek nebo po náročném dni." } },
+  { id: "kama-37", title: "Infinity", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 48, tag: "Vášnivé", description: { setup: "Aktivní poloha nahoře s plynulým pohybem boků a střídáním náklonu.", focus: "Partnerka vede rytmus a může snadno měnit intenzitu.", comfort: "Nepřetěžujte kolena a dělejte krátké pauzy." } },
+  { id: "kama-38", title: "Harmonie", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 15, tag: "Romantické", description: { setup: "Klidná poloha bokem, kde těla zůstávají uvolněná a blízko.", focus: "Synchronizace dechu a pomalých pohybů vytváří jemné propojení.", comfort: "Ideální pro pomalé tempo a pohodlnou komunikaci." } },
+  { id: "kama-39", title: "Samet", pose: "edge-bed", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 18, tag: "Romantické", description: { setup: "Ležící klasická pozice s měkkou oporou a jednoduchým nastavením těla.", focus: "Pomalý rytmus, doteky a nenáročná intimita.", comfort: "Uvolněte boky a stehna, podložte si záda." } },
+  { id: "kama-40", title: "Polární záře", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 24, tag: "Romantické", description: { setup: "Bokem k sobě s propletenýma nohama a možností měnit úhel pánve.", focus: "Mazlení, teasing a pomalé hledání nejpříjemnějšího nastavení.", comfort: "Netlačte na ramena a držte kolena měkká." } },
+  { id: "kama-41", title: "Hvězdný prach", pose: "standing-mirror", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 40, tag: "Akčnější", description: { setup: "Poloha ve stoje s oporou o zeď, dveře nebo pevný nábytek.", focus: "Silná chemie, vizuální kontakt a pocit spontánnosti.", comfort: "Držte rovnováhu a nezkoušejte zvedání bez jistoty." } },
+  { id: "kama-42", title: "Pokušení", pose: "tabletop", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 30, tag: "Hravé", description: { setup: "Poloha na hraně postele, stolu nebo stabilní lavice.", focus: "Hravost, přímý výhled na partnera a snadné vedení pohybu.", comfort: "Vyberte správnou výšku povrchu a zkontrolujte stabilitu." } },
+  { id: "kama-43", title: "Magnet", pose: "seated-face", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 26, tag: "Romantické", description: { setup: "Sedící objetí čelem k sobě, kdy se partneři drží velmi blízko.", focus: "Oční kontakt, tělesné teplo a pomalý rytmus.", comfort: "Opřete se o čelo postele a držte ramena uvolněná." } },
+  { id: "kama-44", title: "Zen", pose: "side-spoon", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 12, tag: "Soft", description: { setup: "Ležení za sebou v naprosto uvolněné poloze.", focus: "Relax, ticho, pomalé tempo a pocit bezpečí.", comfort: "Bez tlaku na záda a kyčle, ideální na večer." } },
+  { id: "kama-45", title: "Noční objetí", pose: "side-spoon", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 14, tag: "Romantické", description: { setup: "Lžičková varianta s větším objetím přes hrudník nebo pas.", focus: "Jemnost, blízkost a nenucená intimita před spaním.", comfort: "Nechte ruce pohodlně položené, aby nebrněly." } },
+  { id: "kama-46", title: "Královna", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 32, tag: "Vášnivé", description: { setup: "Partnerka nahoře v sebevědomější pozici, partner leží nebo je opřený.", focus: "Kontrola rytmu, dominance a intenzivní vizuální kontakt.", comfort: "Stabilita boků a pomalé střídání tempa pomůže pohodlí." } },
+  { id: "kama-47", title: "Jemný déšť", pose: "side-facing", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 16, tag: "Romantické", description: { setup: "Ležení bokem velmi blízko u sebe s volnými rameny a měkkým kontaktem.", focus: "Pomalé tempo, dlouhé doteky a klidná atmosféra.", comfort: "Použijte měkké polštáře a nezapomeňte měnit strany." } },
+  { id: "kama-48", title: "Mléčná dráha", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Pokročilé", xp: 44, tag: "Vášnivé", description: { setup: "Aktivní poloha nahoře s větším rozsahem pohybu boků.", focus: "Intenzita, rytmus a výraznější zapojení partnerky.", comfort: "Pravidelně měňte tempo a nepřetěžujte stehna." } },
+  { id: "kama-49", title: "Tango", pose: "standing-mirror", category: "Vaginální", type: "Vaginální", difficulty: "Středně pokročilé", xp: 34, tag: "Hravé", description: { setup: "Stojící poloha s těsným kontaktem, kdy se partneři pohybují jako v pomalém tanci.", focus: "Rytmus, hravost a dominance pohledu.", comfort: "Použijte oporu a nechte pohyby malé a přesné." } },
+  { id: "kama-50", title: "Obkročmo", pose: "top-facing", category: "Vaginální", type: "Vaginální", difficulty: "Začátečníci", xp: 20, tag: "Romantické", description: { setup: "Partnerka obkročí partnera nahoře nebo v sedě a nastaví si pohodlný úhel.", focus: "Jednoduchá kontrola tempa, blízké doteky a pohodlné střídání rytmu.", comfort: "Nechte kolena volná a používejte ruce pro oporu." } }
 ];
 
 const navItems = [
@@ -492,10 +408,29 @@ function getPushSupportMessage() {
 
 function getChallengeStats(challenges, currentUserId) {
   const completed = challenges.filter((challenge) => challenge.completed);
-  const coupleXp = completed.reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
-  const myXp = completed.filter((challenge) => challenge.completed_by === currentUserId).reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
-  const partnerXp = completed.filter((challenge) => challenge.completed_by && challenge.completed_by !== currentUserId).reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
-  const openXp = completed.filter((challenge) => !challenge.completed_by).reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
+  const activeDuels = challenges.filter((challenge) => challenge.challenge_status === 'active');
+  const failedDuels = challenges.filter((challenge) => ['failed', 'debt_assigned'].includes(challenge.challenge_status));
+  const repaidDuels = challenges.filter((challenge) => challenge.challenge_status === 'debt_repaid');
+
+  const completedXpFor = (userId) => completed
+    .filter((challenge) => challenge.completed_by === userId)
+    .reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
+
+  const penaltyFor = (userId) => failedDuels
+    .filter((challenge) => challenge.assigned_to === userId)
+    .reduce((sum, challenge) => sum + (challenge.penalty_points || challenge.xp || 10), 0);
+
+  const repaidFor = (userId) => repaidDuels
+    .filter((challenge) => challenge.assigned_to === userId)
+    .reduce((sum, challenge) => sum + (challenge.penalty_points || challenge.xp || 10), 0);
+
+  const myXp = completedXpFor(currentUserId) - penaltyFor(currentUserId) + repaidFor(currentUserId);
+  const partnerIds = [...new Set(challenges.flatMap((challenge) => [challenge.completed_by, challenge.assigned_to, challenge.challenged_by]).filter(Boolean))]
+    .filter((id) => id !== currentUserId);
+  const partnerId = partnerIds[0];
+  const partnerXp = partnerId ? completedXpFor(partnerId) - penaltyFor(partnerId) + repaidFor(partnerId) : 0;
+  const coupleXp = Math.max(0, myXp) + Math.max(0, partnerXp);
+
   const currentTier = [...rewardTiers].reverse().find((tier) => coupleXp >= tier.minXp) || rewardTiers[0];
   const nextTier = rewardTiers.find((tier) => tier.minXp > coupleXp) || rewardTiers[rewardTiers.length - 1];
   const currentMin = currentTier.minXp;
@@ -507,7 +442,21 @@ function getChallengeStats(challenges, currentUserId) {
     xp: completed.filter((challenge) => challenge.category === category.id).reduce((sum, challenge) => sum + (challenge.xp || 10), 0),
   }));
 
-  return { coupleXp, myXp, partnerXp, openXp, level: currentTier.level, title: currentTier.title, currentMin, nextMin, progress: Math.max(0, Math.min(100, progress)), categoryScores };
+  return {
+    coupleXp,
+    myXp,
+    partnerXp,
+    myDebt: Math.max(0, -myXp),
+    partnerDebt: Math.max(0, -partnerXp),
+    activeDuels,
+    failedDuels,
+    level: currentTier.level,
+    title: currentTier.title,
+    currentMin,
+    nextMin,
+    progress: Math.max(0, Math.min(100, progress)),
+    categoryScores,
+  };
 }
 
 async function uploadToStorage(file, folder, options = {}) {
@@ -580,6 +529,7 @@ export default function App() {
   const [pairCodeInput, setPairCodeInput] = useState('');
   const [posts, setPosts] = useState([]);
   const [coupleStatuses, setCoupleStatuses] = useState([]);
+  const [coupleMembers, setCoupleMembers] = useState([]);
   const [challenges, setChallenges] = useState([]);
   const [kamaProgress, setKamaProgress] = useState([]);
   const [selectedMoodId, setSelectedMoodId] = useState(local.selectedMoodId || 'love');
@@ -591,6 +541,7 @@ export default function App() {
   const [challengeCategory, setChallengeCategory] = useState('all');
   const [kamaFilter, setKamaFilter] = useState('all');
   const [oralOnly, setOralOnly] = useState(false);
+  const [kamaDifficultyFilter, setKamaDifficultyFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('newest');
   const [panicMode, setPanicMode] = useState(local.panicMode ?? true);
   const [vanishMode, setVanishMode] = useState(local.vanishMode ?? true);
@@ -657,6 +608,7 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `couple_id=eq.${couple.id}` }, () => loadChallenges(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kama_progress', filter: `couple_id=eq.${couple.id}` }, () => loadKamaProgress(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_status', filter: `couple_id=eq.${couple.id}` }, () => loadCoupleStatuses(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_members', filter: `couple_id=eq.${couple.id}` }, () => loadCoupleMembers(couple.id))
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -682,7 +634,7 @@ export default function App() {
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id)]);
+        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -764,6 +716,43 @@ export default function App() {
 
     if (error) return setToast(error.message);
     setCoupleStatuses(data || []);
+  }
+
+
+  async function loadCoupleMembers(coupleId) {
+    const { data, error } = await supabase.from('couple_members').select('*').eq('couple_id', coupleId);
+    if (error) return setToast(error.message);
+    setCoupleMembers(data || []);
+  }
+
+  function getPartnerUserId() {
+    const member = coupleMembers.find((item) => item.user_id && item.user_id !== session?.user?.id);
+    if (member?.user_id) return member.user_id;
+    const status = coupleStatuses.find((item) => item.user_id && item.user_id !== session?.user?.id);
+    if (status?.user_id) return status.user_id;
+    const post = posts.find((item) => item.author_id && item.author_id !== session?.user?.id);
+    return post?.author_id || null;
+  }
+
+  async function checkExpiredChallengeDuels(sourceChallenges = challenges) {
+    if (!couple?.id || !session?.user?.id) return;
+    const now = Date.now();
+    const expired = sourceChallenges.filter((challenge) =>
+      challenge.challenge_status === 'active'
+      && challenge.challenge_deadline
+      && new Date(challenge.challenge_deadline).getTime() < now
+    );
+
+    for (const challenge of expired) {
+      const { error } = await supabase
+        .from('challenges')
+        .update({ challenge_status: 'failed', failed_at: new Date().toISOString() })
+        .eq('id', challenge.id)
+        .eq('challenge_status', 'active');
+      if (!error) {
+        await notifyPartner('challenge_failed', 'MoodSync', `Výzva nebyla splněna včas: ${challenge.title}. Body byly odečteny.`);
+      }
+    }
   }
 
   async function saveMyStatus(next = {}) {
@@ -899,10 +888,12 @@ export default function App() {
       const { data: seededData, error: seededError } = await supabase.from('challenges').select('*').eq('couple_id', coupleId).order('created_at', { ascending: false });
       if (seededError) return setToast(seededError.message);
       setChallenges(seededData || []);
+      await checkExpiredChallengeDuels(seededData || []);
       return;
     }
 
     setChallenges(data || []);
+    await checkExpiredChallengeDuels(data || []);
   }
 
   async function loadKamaProgress(coupleId) {
@@ -1193,6 +1184,7 @@ export default function App() {
     setChallenges([]);
     setKamaProgress([]);
     setCoupleStatuses([]);
+    setCoupleMembers([]);
   }
 
   const filteredPosts = useMemo(() => {
@@ -1288,8 +1280,8 @@ export default function App() {
 
           {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
           {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
-          {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} stats={challengeStats} />}
-          {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
+          {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
+          {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
           {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
         </div>
 
@@ -1504,24 +1496,26 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
 }
 
 function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName }) {
-  const ownMood = myLiveStatus?.mood_label ? getMoodByLabel(myLiveStatus.mood_label) : latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
-  const partnerMood = partnerLiveStatus?.mood_label ? getMoodByLabel(partnerLiveStatus.mood_label) : latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
-  const ownHeat = myLiveStatus?.heat ?? heat;
-  const ownCloseness = myLiveStatus?.closeness ?? closeness;
-  const partnerHeat = partnerLiveStatus?.heat ?? 0;
-  const partnerCloseness = partnerLiveStatus?.closeness ?? 0;
+  const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
+  const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
+  const ownMood = freshOwnStatus?.mood_label ? getMoodByLabel(freshOwnStatus.mood_label) : latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
+  const partnerMood = freshPartnerStatus?.mood_label ? getMoodByLabel(freshPartnerStatus.mood_label) : latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
+  const ownHeat = freshOwnStatus?.heat ?? heat;
+  const ownCloseness = freshOwnStatus?.closeness ?? closeness;
+  const partnerHeat = freshPartnerStatus?.heat ?? 0;
+  const partnerCloseness = freshPartnerStatus?.closeness ?? 0;
 
   return (
     <>
       <section className="grid min-w-0 gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <PartnerCard
           name={couple ? 'Partner/ka' : 'Čeká na spárování'}
-          status={partnerLiveStatus ? `Aktualizováno ${formatDate(partnerLiveStatus.updated_at)}` : couple ? 'Čekám na první změnu' : 'Zadej párovací kód'}
+          status={freshPartnerStatus ? `Aktualizováno ${formatDate(freshPartnerStatus.updated_at)}` : couple ? 'Čekám na první změnu' : 'Zadej párovací kód'}
           mood={partnerMood || selectedMood}
           heat={partnerHeat}
           closeness={partnerCloseness}
           note={latestPartnerMoodPost?.text || (couple ? 'Jakmile partner/ka změní náladu nebo teploměr, uvidíš to tady nahoře.' : 'Pár zatím není propojený.')}
-          waiting={!couple || !partnerLiveStatus}
+          waiting={!couple || !freshPartnerStatus}
           highlight
         />
         <Card>
@@ -1535,7 +1529,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         </Card>
       </section>
 
-      <RelationshipOverview ownHeat={ownHeat} ownCloseness={ownCloseness} partnerHeat={partnerHeat} partnerCloseness={partnerCloseness} hasPartnerMood={Boolean(partnerLiveStatus)} />
+      <RelationshipOverview ownHeat={ownHeat} ownCloseness={ownCloseness} partnerHeat={partnerHeat} partnerCloseness={partnerCloseness} hasPartnerMood={Boolean(freshPartnerStatus)} />
 
       <Card>
         <h2 className="mb-4 flex items-center justify-between text-2xl font-black">Moje aktuální nálada<Bell className="text-pink-500" /></h2>
@@ -1797,8 +1791,131 @@ function FullscreenImageViewer({ image, onClose }) {
   );
 }
 
-function ChallengesPanel({ challenges, allChallenges, category, setCategory, addChallenge, updateChallenge, stats }) {
-  return <div className="grid gap-6"><Card><div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1 text-sm font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200"><Trophy size={16} /> Couple progression</div><h2 className="mt-3 text-3xl font-black">Level {stats.level}: {stats.title}</h2><p className="mt-2 text-gray-500 dark:text-gray-300">Plňte vlastní výzvy, sbírejte XP a soutěžte, kdo bude mít víc bodů.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 p-6 text-white shadow-xl"><div className="flex items-center justify-between"><div><div className="text-sm font-bold text-white/80">Souboj XP</div><div className="text-5xl font-black">{stats.myXp}:{stats.partnerXp}</div><div className="mt-1 text-xs font-bold text-white/80">Já vs Partner/ka</div></div><Award size={46} /></div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${stats.progress}%` }} /></div><div className="mt-2 flex justify-between text-xs font-bold text-white/80"><span>{stats.currentMin} XP</span><span>{stats.nextMin} XP</span></div></div></div></Card><section className="grid gap-6 lg:grid-cols-3"><Card><h3 className="flex items-center gap-2 text-xl font-black"><Star className="text-pink-500" /> Kategorie skóre</h3><div className="mt-5 space-y-4">{stats.categoryScores.map((score) => <div key={score.id}><div className="mb-2 flex justify-between text-sm font-bold"><span>{score.label}</span><span>{score.xp} XP</span></div><div className="h-3 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"><div className={`h-full rounded-full bg-gradient-to-r ${score.color}`} style={{ width: `${Math.min(100, score.xp)}%` }} /></div></div>)}</div></Card><Card className="lg:col-span-2"><h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-purple-500" /> Odměny a levely</h3><div className="mt-5 grid gap-3 md:grid-cols-2">{rewardTiers.map((tier) => <div key={tier.level} className={`rounded-3xl border p-4 ${stats.coupleXp >= tier.minXp ? 'border-pink-200 bg-pink-50 dark:border-pink-500/30 dark:bg-pink-500/10' : 'border-gray-200 bg-white/70 opacity-60 dark:border-white/10 dark:bg-white/5'}`}><div className="text-sm font-black text-gray-500 dark:text-gray-300">Level {tier.level} · {tier.minXp} XP</div><h4 className="mt-1 text-lg font-black">{tier.title}</h4><p className="mt-1 text-sm text-gray-500 dark:text-gray-300">{tier.reward}</p></div>)}</div></Card></section><ChallengeEditor addChallenge={addChallenge} /><Card><div className="mb-5 flex flex-wrap gap-2">{challengeCategories.map((item) => <PillButton key={item.id} active={category === item.id} onClick={() => setCategory(item.id)}>{item.label}</PillButton>)}</div><div className="grid gap-4 lg:grid-cols-2">{challenges.map((challenge) => <article key={challenge.id} className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5"><h4 className="text-lg font-black">{challenge.title}</h4><div className="mt-2 flex flex-wrap gap-2 text-sm"><span className="rounded-full bg-pink-500 px-3 py-1 font-bold text-white">{challenge.category}</span><span className="rounded-full bg-purple-500 px-3 py-1 font-bold text-white">+{challenge.xp || 10} XP</span><span className="rounded-full bg-white px-3 py-1 font-bold text-gray-700 dark:bg-white/10 dark:text-gray-200">{challenge.assigned_to ? 'Osobní výzva' : 'Otevřená výzva'}</span>{challenge.completed_by && <span className="rounded-full bg-emerald-500 px-3 py-1 font-bold text-white">Bod získán</span>}</div><div className="mt-4 flex gap-2"><button onClick={() => updateChallenge(challenge.id, { accepted: !challenge.accepted })} disabled={challenge.completed} className="flex-1 rounded-2xl bg-gray-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">{challenge.accepted ? 'Odebrat' : 'Přijmout'}</button><button onClick={() => updateChallenge(challenge.id, { completed: true, accepted: true, completed_at: new Date().toISOString() })} disabled={challenge.completed} className="flex-1 rounded-2xl bg-pink-500 px-4 py-2 text-sm font-black text-white disabled:opacity-40">{challenge.completed ? 'Hotovo' : 'Splnit za sebe'}</button></div></article>)}</div></Card></div>;
+function ChallengesPanel({ challenges, allChallenges, category, setCategory, addChallenge, updateChallenge, challengePartner, assignDebtTask, repayDebt, currentUserId, stats }) {
+  const debtRewards = [
+    { label: 'Masáž 20 minut', value: 20 },
+    { label: 'Snídaně do postele', value: 25 },
+    { label: 'Večer podle partnera', value: 30 },
+    { label: 'Romantické překvapení', value: 40 },
+  ];
+
+  const activeDuels = allChallenges.filter((challenge) => challenge.challenge_status === 'active');
+  const debts = allChallenges.filter((challenge) => ['failed', 'debt_assigned'].includes(challenge.challenge_status));
+
+  return (
+    <div className="grid gap-6">
+      <Card>
+        <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1 text-sm font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200"><Trophy size={16} /> Výzvy 2.0</div>
+            <h2 className="mt-3 text-3xl font-black">Souboj partnerů</h2>
+            <p className="mt-2 text-gray-500 dark:text-gray-300">Vyzvěte partnera, nastavte časový limit a soutěžte o body. Nesplněná výzva vytvoří dluh, který musí partner smazat nápravnou odměnou.</p>
+          </div>
+          <div className="rounded-[2rem] bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 p-6 text-white shadow-xl">
+            <div className="text-sm font-bold text-white/80">Žebříček</div>
+            <div className="mt-2 grid grid-cols-2 gap-3 text-center">
+              <div className="rounded-2xl bg-white/15 p-4"><div className="text-xs font-bold text-white/70">Já</div><div className="text-4xl font-black">{stats.myXp}</div></div>
+              <div className="rounded-2xl bg-white/15 p-4"><div className="text-xs font-bold text-white/70">Partner/ka</div><div className="text-4xl font-black">{stats.partnerXp}</div></div>
+            </div>
+            <div className="mt-4 text-sm font-bold text-white/80">Dluh: Já {stats.myDebt} / Partner {stats.partnerDebt}</div>
+          </div>
+        </div>
+      </Card>
+
+      {(activeDuels.length > 0 || debts.length > 0) && (
+        <section className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <h3 className="flex items-center gap-2 text-xl font-black"><Clock className="text-pink-500" /> Aktivní časové výzvy</h3>
+            <div className="mt-4 grid gap-3">
+              {activeDuels.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-300">Žádná aktivní výzva s limitem.</p>}
+              {activeDuels.map((challenge) => (
+                <div key={challenge.id} className="rounded-3xl border border-pink-100 bg-pink-50 p-4 dark:border-white/10 dark:bg-white/5">
+                  <div className="font-black">{challenge.title}</div>
+                  <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">Termín: {formatDate(challenge.challenge_deadline)} · penalizace -{challenge.penalty_points || challenge.xp} bodů</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="flex items-center gap-2 text-xl font-black"><Target className="text-purple-500" /> Dluhy a nápravy</h3>
+            <div className="mt-4 grid gap-3">
+              {debts.length === 0 && <p className="text-sm text-gray-500 dark:text-gray-300">Nikdo není v mínusu.</p>}
+              {debts.map((challenge) => {
+                const isMyDebt = challenge.assigned_to === currentUserId;
+                return (
+                  <div key={challenge.id} className="rounded-3xl border border-purple-100 bg-purple-50 p-4 dark:border-white/10 dark:bg-white/5">
+                    <div className="font-black">{challenge.title}</div>
+                    <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">Dluh: -{challenge.penalty_points || challenge.xp} bodů</div>
+                    {challenge.debt_task ? (
+                      <div className="mt-3 rounded-2xl bg-white p-3 text-sm font-bold dark:bg-white/10">Náprava: {challenge.debt_task}</div>
+                    ) : !isMyDebt ? (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {debtRewards.map((reward) => <button key={reward.label} onClick={() => assignDebtTask(challenge, reward.label)} className="rounded-2xl bg-gray-900 px-3 py-2 text-xs font-black text-white dark:bg-white dark:text-gray-900">{reward.label}</button>)}
+                      </div>
+                    ) : (
+                      <div className="mt-3 text-sm font-bold text-pink-600 dark:text-pink-300">Čekáš na zadání nápravy od partnera.</div>
+                    )}
+                    {isMyDebt && challenge.debt_task && <button onClick={() => repayDebt(challenge)} className="mt-3 w-full rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-black text-white">Splněno, smazat dluh</button>}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </section>
+      )}
+
+      <ChallengeEditor addChallenge={addChallenge} />
+
+      <Card>
+        <div className="mb-5 flex flex-wrap gap-2">{challengeCategories.map((item) => <PillButton key={item.id} active={category === item.id} onClick={() => setCategory(item.id)}>{item.label}</PillButton>)}</div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {challenges.map((challenge) => <ChallengeCard key={challenge.id} challenge={challenge} updateChallenge={updateChallenge} challengePartner={challengePartner} currentUserId={currentUserId} />)}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ChallengeCard({ challenge, updateChallenge, challengePartner, currentUserId }) {
+  const [hours, setHours] = useState(24);
+  const isAssignedToMe = challenge.assigned_to === currentUserId;
+  const isActive = challenge.challenge_status === 'active';
+
+  return (
+    <article className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h4 className="text-lg font-black">{challenge.title}</h4>
+          <div className="mt-2 flex flex-wrap gap-2 text-sm">
+            <span className="rounded-full bg-pink-500 px-3 py-1 font-bold text-white">{challenge.category}</span>
+            <span className="rounded-full bg-purple-500 px-3 py-1 font-bold text-white">+{challenge.xp || 10} XP</span>
+            {isActive && <span className="rounded-full bg-amber-400 px-3 py-1 font-bold text-gray-900">Limit {formatDate(challenge.challenge_deadline)}</span>}
+            {challenge.completed_by && <span className="rounded-full bg-emerald-500 px-3 py-1 font-bold text-white">Bod získán</span>}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <button onClick={() => updateChallenge(challenge.id, { accepted: !challenge.accepted })} disabled={challenge.completed} className="rounded-2xl bg-gray-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">{challenge.accepted ? 'Odebrat' : 'Přijmout'}</button>
+        <button onClick={() => updateChallenge(challenge.id, { completed: true, accepted: true, completed_at: new Date().toISOString(), challenge_status: 'completed' })} disabled={challenge.completed || (isActive && !isAssignedToMe)} className="rounded-2xl bg-pink-500 px-4 py-2 text-sm font-black text-white disabled:opacity-40">{challenge.completed ? 'Hotovo' : isActive && !isAssignedToMe ? 'Čeká na partnera' : 'Splnit za sebe'}</button>
+      </div>
+      {!challenge.completed && !isActive && (
+        <div className="mt-4 rounded-2xl bg-white p-3 dark:bg-white/10">
+          <div className="mb-2 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-300">Vyzvat partnera</div>
+          <div className="flex gap-2">
+            <select value={hours} onChange={(event) => setHours(Number(event.target.value))} className="min-w-0 flex-1 rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">
+              <option value={2}>2 hodiny</option>
+              <option value={8}>Dnes</option>
+              <option value={24}>24 hodin</option>
+              <option value={72}>3 dny</option>
+              <option value={168}>7 dní</option>
+            </select>
+            <button onClick={() => challengePartner(challenge, hours)} className="rounded-2xl bg-purple-500 px-4 py-2 text-sm font-black text-white">Vyzvat</button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
 }
 
 function ChallengeEditor({ addChallenge }) {
@@ -1811,26 +1928,30 @@ function ChallengeEditor({ addChallenge }) {
   return <Card><h3 className="mb-4 text-xl font-black">Vytvořit vlastní výzvu</h3><div className="grid gap-3 md:grid-cols-[1fr_150px_150px_130px_110px_auto]"><TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Napiš vlastní výzvu..." /><select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{challengeCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option>Easy</option><option>Medium</option><option>Hard</option><option>Extreme</option></select><select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="open">Kdo dřív</option><option value="me">Pro mě</option></select><TextInput type="number" min="1" max="100" value={xp} onChange={(event) => setXp(Number(event.target.value))} /><button onClick={submit} className="rounded-2xl bg-purple-500 px-5 py-3 font-black text-white hover:bg-purple-600">Přidat</button></div></Card>;
 }
 
-function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto }) {
+function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto }) {
   const completed = kamaProgress.filter((item) => item.completed).length;
   const progress = Math.round((completed / Math.max(1, kamaPositions.length)) * 100);
-  const categories = ['all', ...new Set(kamaPositions.map((position) => position.category))];
-  const filteredBase = kamaFilter === 'all' ? kamaPositions : kamaPositions.filter((position) => position.category === kamaFilter);
-  const filtered = oralOnly ? filteredBase.filter((position) => position.category === 'Oral') : filteredBase;
+  const typeFilters = ['all', 'Vaginální', 'Orální', 'Romantické'];
+  const difficultyFilters = ['all', 'Začátečníci', 'Středně pokročilé', 'Pokročilé'];
+  const filtered = kamaPositions
+    .filter((position) => kamaFilter === 'all' || position.type === kamaFilter || position.tag === kamaFilter)
+    .filter((position) => kamaDifficultyFilter === 'all' || position.difficulty === kamaDifficultyFilter)
+    .filter((position) => !oralOnly || position.type === 'Orální');
   const progressById = Object.fromEntries(kamaProgress.map((item) => [item.position_id, item]));
 
-  return <div className="grid gap-6"><Card><div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Intimacy Explorer</div><h2 className="mt-4 text-4xl font-black">Kamasutra Journey</h2><p className="mt-3 max-w-2xl text-gray-500 dark:text-gray-300">Tracker poloh, fotek po splnění a společných vzpomínek uložený v cloudu.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-6 text-white shadow-2xl"><div className="text-sm font-bold text-white/80">Splněno</div><div className="mt-2 text-7xl font-black">{completed}</div><div className="text-lg font-bold text-white/80">z {kamaPositions.length} poloh</div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap gap-2 items-center">{categories.map((category) => <PillButton key={category} active={kamaFilter === category} onClick={() => setKamaFilter(category)}>{category === 'all' ? 'Všechny' : category}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid gap-6 lg:grid-cols-2">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><div className="grid xl:grid-cols-[0.9fr_1.1fr]"><div className="bg-[#fff7f3] p-5 dark:bg-[#120d18]"><PoseGuide pose={position.pose} title={position.title} /></div><div className="p-6"><h3 className="text-2xl font-black">{position.title}</h3><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{position.difficulty}</span><span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">+{position.xp} XP</span></div><div className="mt-5 space-y-4 text-sm leading-relaxed text-gray-600 dark:text-gray-300"><InstructionBlock number="1" title="Nastavení" text={position.description.setup} /><InstructionBlock number="2" title="Pohyb a tempo" text={position.description.focus} /><InstructionBlock number="3" title="Komfort a bezpečí" text={position.description.comfort} /></div><div className="mt-6 space-y-4"><button onClick={() => toggleKama(position.id)} className={`w-full rounded-2xl py-3 font-black transition ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Označit jako splněné'}</button>{item?.completed && <div className="rounded-3xl border border-pink-200 bg-pink-50 p-4 dark:border-pink-500/20 dark:bg-pink-500/10"><div className="mb-3 text-sm font-black text-pink-700 dark:text-pink-200">Vaše vzpomínka k poloze</div><label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-4 py-6 text-center text-sm font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku páru' : 'Přidat fotku páru'}</label>{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-4 h-72 w-full rounded-3xl object-cover shadow-2xl" />}{item?.locked && <div className="mt-4 rounded-3xl bg-gray-900 p-5 text-center text-sm font-bold text-white"><Lock className="mx-auto mb-2" />Šifrovaná fotka. Zadej správné E2EE heslo v profilu.</div>}</div>}</div></div></div></Card>; })}</section></div>;
+  return <div className="grid gap-5"><Card><div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Kamasutra 2.0</div><h2 className="mt-3 text-3xl font-black sm:text-4xl">Kamasutra Journey</h2><p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, menší mobilní karty, detailnější popisy a filtry podle typu i náročnosti.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-5 text-white shadow-2xl"><div className="text-xs font-bold text-white/80">Splněno</div><div className="text-5xl font-black">{completed}</div><div className="text-sm font-bold text-white/80">z {kamaPositions.length}</div><div className="mt-3 h-3 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap items-center gap-2">{typeFilters.map((filter) => <PillButton key={filter} active={kamaFilter === filter} onClick={() => setKamaFilter(filter)}>{filter === 'all' ? 'Vše' : filter}</PillButton>)}{difficultyFilters.map((filter) => <PillButton key={filter} active={kamaDifficultyFilter === filter} onClick={() => setKamaDifficultyFilter(filter)}>{filter === 'all' ? 'Všechny úrovně' : filter}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><PoseGuide pose={position.pose} title={position.title} compact /><div className="p-3 sm:p-4"><h3 className="text-base font-black sm:text-xl">{position.title}</h3><div className="mt-2 flex flex-wrap gap-1"><span className="rounded-full bg-pink-100 px-2 py-1 text-[10px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{position.type}</span><span className="rounded-full bg-purple-100 px-2 py-1 text-[10px] font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">{position.difficulty}</span></div><div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm"><InstructionBlock number="1" title="Nastavení" text={position.description.setup} /><InstructionBlock number="2" title="Tempo" text={position.description.focus} /><InstructionBlock number="3" title="Komfort" text={position.description.comfort} /></div><button onClick={() => toggleKama(position.id)} className={`mt-3 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Splnit'}</button>{item?.completed && <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-3 py-3 text-center text-[11px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku' : 'Přidat fotku'}</label>}{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-3 h-36 w-full rounded-2xl object-cover shadow-xl" />}{item?.locked && <div className="mt-3 rounded-2xl bg-gray-900 p-3 text-center text-xs font-bold text-white"><Lock className="mx-auto mb-1" size={16} />Šifrovaná fotka</div>}</div></Card>; })}</section></div>;
 }
+
 
 function InstructionBlock({ number, title, text }) {
   return <div className="rounded-3xl border border-gray-100 bg-white p-4 dark:border-white/10 dark:bg-white/5"><div className="flex items-start gap-3"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-pink-500 text-sm font-black text-white">{number}</div><div><div className="font-black text-gray-900 dark:text-white">{title}</div><p className="mt-1">{text}</p></div></div></div>;
 }
 
-function PoseGuide({ pose, title }) {
+function PoseGuide({ pose, title, compact = false }) {
   const guides = { 'seated-face': { icon: Heart, label: 'Romantická blízkost' }, 'side-spoon': { icon: Moon, label: 'Pomalá intimita' }, 'edge-bed': { icon: Flame, label: 'Intenzivní energie' }, 'standing-mirror': { icon: Sparkles, label: 'Flirt a teasing' }, 'top-facing': { icon: Trophy, label: 'Partnerka vede tempo' }, 'kneeling-arch': { icon: Flame, label: 'Silná intenzita' }, tabletop: { icon: Sparkles, label: 'Hravá změna prostředí' }, 'side-facing': { icon: Moon, label: 'Jemné propojení' } };
   const guide = guides[pose] || { icon: Heart, label: 'Intimní moment' };
   const Icon = guide.icon;
-  return <div className="rounded-[2rem] border border-gray-200 bg-white p-5 shadow-inner dark:border-white/10 dark:bg-white/5"><div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-pink-200 bg-gradient-to-br from-pink-50 to-rose-50 p-10 text-center dark:border-pink-500/20 dark:from-pink-500/5 dark:to-purple-500/5"><div className="flex h-24 w-24 items-center justify-center rounded-full bg-white shadow-xl dark:bg-white/10"><Icon className="text-pink-500" size={42} /></div><div className="mt-5 text-2xl font-black text-gray-900 dark:text-white">{title}</div><div className="mt-2 rounded-full bg-pink-100 px-4 py-2 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{guide.label}</div><p className="mt-4 max-w-sm text-sm leading-relaxed text-gray-600 dark:text-gray-300">Ikonový režim. Vlastní fotku můžete přidat po splnění.</p></div></div>;
+  return <div className={`bg-[#fff7f3] dark:bg-[#120d18] ${compact ? 'p-3' : 'p-5'}`}><div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-pink-200 bg-gradient-to-br from-pink-50 to-rose-50 p-4 text-center dark:border-pink-500/20 dark:from-pink-500/5 dark:to-purple-500/5 sm:p-6"><div className={`${compact ? 'h-14 w-14 sm:h-16 sm:w-16' : 'h-24 w-24'} flex items-center justify-center rounded-full bg-white shadow-xl dark:bg-white/10`}><Icon className="text-pink-500" size={compact ? 26 : 42} /></div><div className={`${compact ? 'mt-3 text-sm sm:text-lg' : 'mt-5 text-2xl'} font-black text-gray-900 dark:text-white`}>{title}</div><div className="mt-2 rounded-full bg-pink-100 px-3 py-1 text-[10px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-xs">{guide.label}</div></div></div>;
 }
 
 function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartnerName, updateProfileName, uploadCoupleAvatar, encryptionPassphrase, saveEncryptionPassphrase, signOut }) {

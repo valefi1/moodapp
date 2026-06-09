@@ -1,0 +1,15 @@
+-- MoodSync daily mood reminder notes
+-- 1) Deploy function:
+-- npx supabase functions deploy mood-daily-reminder
+--
+-- 2) Optional secret for cron calls:
+-- npx supabase secrets set MOOD_REMINDER_SECRET="your-long-random-secret"
+--
+-- 3) Schedule it once per day from Supabase Dashboard:
+-- Edge Functions -> mood-daily-reminder -> Schedule
+-- Example: every day at 20:00.
+-- If using MOOD_REMINDER_SECRET, send header:
+-- x-cron-secret: your-long-random-secret
+--
+-- The function sends a push reminder to users whose couple_status is older than 24 hours
+-- or missing. In the app, stale moods are hidden after 24 hours.
