@@ -36,6 +36,7 @@ const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supa
 const LOCAL_KEY = 'moodsync-ui-v2';
 const STORAGE_BUCKET = 'couple-media';
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+const ENC_KEY_SESSION = 'moodsync-e2ee-passphrase';
 
 const moods = [
   { id: 'love', icon: Heart, label: 'Zamilovaný/á', color: 'from-pink-400 to-rose-500', tone: 'positive' },
@@ -405,6 +406,90 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+function bytesToBase64(bytes) {
+  let binary = '';
+  const view = new Uint8Array(bytes);
+  view.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+}
+
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function deriveEncryptionKey(passphrase, coupleId) {
+  const encoder = new TextEncoder();
+  const material = await crypto.subtle.importKey('raw', encoder.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(`moodsync:${coupleId}`),
+      iterations: 250000,
+      hash: 'SHA-256',
+    },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptFileForCouple(file, coupleId, passphrase) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveEncryptionKey(passphrase, coupleId);
+  const encryptedBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await file.arrayBuffer());
+  return {
+    blob: new Blob([encryptedBuffer], { type: 'application/octet-stream' }),
+    iv: bytesToBase64(iv),
+    mimeType: file.type || 'image/jpeg',
+  };
+}
+
+async function decryptSignedUrlToObjectUrl(signedUrl, coupleId, passphrase, ivBase64, mimeType = 'image/jpeg') {
+  if (!signedUrl || !coupleId || !passphrase || !ivBase64) return null;
+  const response = await fetch(signedUrl);
+  if (!response.ok) throw new Error('Šifrovaný soubor se nepodařilo stáhnout.');
+  const encryptedBuffer = await response.arrayBuffer();
+  const key = await deriveEncryptionKey(passphrase, coupleId);
+  const decryptedBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(ivBase64) }, key, encryptedBuffer);
+  return URL.createObjectURL(new Blob([decryptedBuffer], { type: mimeType || 'image/jpeg' }));
+}
+
+function isIosDevice() {
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isStandalonePwa() {
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+async function getServiceWorkerRegistration() {
+  if (!('serviceWorker' in navigator)) return null;
+  const existing = await navigator.serviceWorker.getRegistration('/');
+  if (existing) return existing;
+  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  await navigator.serviceWorker.ready;
+  return registration;
+}
+
+function getPushSupportMessage() {
+  if (!('Notification' in window)) return 'Tenhle prohlížeč nepodporuje oznámení.';
+  if (!('serviceWorker' in navigator)) return 'Tenhle prohlížeč nepodporuje Service Worker.';
+  if (!('PushManager' in window)) {
+    if (isIosDevice()) {
+      return 'Na iPhonu fungují push notifikace jen po přidání aplikace na plochu přes Safari a spuštění z ikony na ploše.';
+    }
+    return 'Tenhle prohlížeč nepodporuje web push notifikace.';
+  }
+  if (isIosDevice() && !isStandalonePwa()) {
+    return 'Na iPhonu nejdřív otevři aplikaci v Safari, dej Sdílet → Přidat na plochu a pak ji spusť z nové ikony.';
+  }
+  return '';
+}
+
 function getChallengeStats(challenges, currentUserId) {
   const completed = challenges.filter((challenge) => challenge.completed);
   const coupleXp = completed.reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
@@ -425,13 +510,29 @@ function getChallengeStats(challenges, currentUserId) {
   return { coupleXp, myXp, partnerXp, openXp, level: currentTier.level, title: currentTier.title, currentMin, nextMin, progress: Math.max(0, Math.min(100, progress)), categoryScores };
 }
 
-async function uploadToStorage(file, folder) {
+async function uploadToStorage(file, folder, options = {}) {
   if (!supabase || !file) return null;
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-  const path = `${folder}/${crypto.randomUUID()}-${safeName}`;
-  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, { cacheControl: '3600', upsert: false });
+  let uploadFile = file;
+  let uploadName = safeName;
+  let encryption = { encrypted: false, encryptionIv: null, mimeType: file.type || null };
+
+  if (options.encrypt) {
+    if (!options.coupleId || !options.passphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu.');
+    const encrypted = await encryptFileForCouple(file, options.coupleId, options.passphrase);
+    uploadFile = encrypted.blob;
+    uploadName = `${safeName}.enc`;
+    encryption = { encrypted: true, encryptionIv: encrypted.iv, mimeType: encrypted.mimeType };
+  }
+
+  const path = `${folder}/${crypto.randomUUID()}-${uploadName}`;
+  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, uploadFile, {
+    cacheControl: '3600',
+    upsert: false,
+    contentType: encryption.encrypted ? 'application/octet-stream' : file.type,
+  });
   if (error) throw error;
-  return path;
+  return { path, ...encryption };
 }
 
 async function getSignedUrl(path) {
@@ -497,16 +598,24 @@ export default function App() {
   const [creatingCouple, setCreatingCouple] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [encryptionPassphrase, setEncryptionPassphrase] = useState(() => sessionStorage.getItem(ENC_KEY_SESSION) || '');
 
   const isBackendReady = Boolean(supabase);
   const selectedMood = moods.find((mood) => mood.id === selectedMoodId) || moods[0];
   const appClass = dark ? 'dark' : '';
+  const encryptionReady = Boolean(couple?.id && encryptionPassphrase);
 
   useEffect(() => {
     saveLocalState({ dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode });
     document.documentElement.classList.toggle('dark', Boolean(dark));
     document.body.classList.toggle('dark', Boolean(dark));
   }, [dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode]);
+
+  useEffect(() => {
+    getServiceWorkerRegistration().catch(() => {
+      // Service Worker registrace není kritická pro načtení aplikace.
+    });
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -531,6 +640,13 @@ export default function App() {
     loadCloudData();
     checkNotificationState();
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!couple?.id) return;
+    loadPosts(couple.id);
+    loadKamaProgress(couple.id);
+    if (couple.avatar_path) loadCoupleAvatar(couple);
+  }, [encryptionPassphrase, couple?.id]);
 
   useEffect(() => {
     if (!supabase || !couple?.id) return;
@@ -563,7 +679,7 @@ export default function App() {
 
       const activeCouple = membership?.couples || null;
       setCouple(activeCouple);
-      setCoupleAvatarUrl(activeCouple?.avatar_path ? await getSignedUrl(activeCouple.avatar_path) : null);
+      setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
         await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id)]);
@@ -593,8 +709,50 @@ export default function App() {
     const { data, error } = await supabase.from('posts').select('*').eq('couple_id', coupleId).order('created_at', { ascending: false });
     if (error) return setToast(error.message);
 
-    const hydrated = await Promise.all((data || []).map(async (post) => ({ ...post, signedUrl: post.image_path ? await getSignedUrl(post.image_path) : null })));
+    const hydrated = await Promise.all((data || []).map(async (post) => {
+      const rawSignedUrl = post.image_path ? await getSignedUrl(post.image_path) : null;
+      let displayUrl = rawSignedUrl;
+      let locked = false;
+
+      if (post.encrypted && rawSignedUrl) {
+        if (!encryptionPassphrase) {
+          displayUrl = null;
+          locked = true;
+        } else {
+          try {
+            displayUrl = await decryptSignedUrlToObjectUrl(rawSignedUrl, coupleId, encryptionPassphrase, post.encryption_iv, post.mime_type);
+          } catch {
+            displayUrl = null;
+            locked = true;
+          }
+        }
+      }
+
+      return { ...post, signedUrl: displayUrl, locked };
+    }));
     setPosts(hydrated);
+  }
+
+  async function getCoupleAvatarUrl(activeCouple) {
+    if (!activeCouple?.avatar_path) return null;
+    const signedUrl = await getSignedUrl(activeCouple.avatar_path);
+    if (!activeCouple.avatar_encrypted) return signedUrl;
+    if (!encryptionPassphrase) return null;
+    try {
+      return await decryptSignedUrlToObjectUrl(
+        signedUrl,
+        activeCouple.id,
+        encryptionPassphrase,
+        activeCouple.avatar_encryption_iv,
+        activeCouple.avatar_mime_type
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadCoupleAvatar(activeCouple = couple) {
+    setCoupleAvatarUrl(await getCoupleAvatarUrl(activeCouple));
   }
 
   async function loadCoupleStatuses(coupleId) {
@@ -628,32 +786,52 @@ export default function App() {
   }
 
   async function checkNotificationState() {
-    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    const registration = await navigator.serviceWorker.getRegistration('/sw.js');
-    const subscription = await registration?.pushManager.getSubscription();
-    setNotificationsEnabled(Notification.permission === 'granted' && Boolean(subscription));
+    const supportMessage = getPushSupportMessage();
+    if (supportMessage) {
+      setNotificationsEnabled(false);
+      return;
+    }
+
+    try {
+      const registration = await getServiceWorkerRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+      setNotificationsEnabled(Notification.permission === 'granted' && Boolean(subscription));
+    } catch {
+      setNotificationsEnabled(false);
+    }
   }
 
   async function enablePushNotifications() {
     if (!couple?.id || !session?.user?.id) return setToast('Nejdřív vytvoř nebo připoj pár.');
-    if (!VAPID_PUBLIC_KEY) return setToast('Chybí VITE_VAPID_PUBLIC_KEY ve Vercel environment variables.');
-    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return setToast('Tenhle prohlížeč nepodporuje push notifikace.');
+    if (!VAPID_PUBLIC_KEY) return setToast('Chybí VITE_VAPID_PUBLIC_KEY ve Vercel Environment Variables.');
+
+    const supportMessage = getPushSupportMessage();
+    if (supportMessage) return setToast(supportMessage);
 
     try {
       const permission = await Notification.requestPermission();
-      if (permission !== 'granted') return setToast('Upozornění nejsou povolená. Povol je v nastavení prohlížeče.');
+      if (permission !== 'granted') {
+        setNotificationsEnabled(false);
+        return setToast('Upozornění nejsou povolená. Povol je v nastavení prohlížeče / iOS.');
+      }
 
-      const registration = await navigator.serviceWorker.register('/sw.js');
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      });
+      const registration = await getServiceWorkerRegistration();
+      if (!registration) throw new Error('Service Worker se nepodařilo zaregistrovat.');
+
+      let subscription = await registration.pushManager.getSubscription();
+
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
 
       const { error } = await supabase.from('push_subscriptions').upsert(
         {
           couple_id: couple.id,
           user_id: session.user.id,
-          subscription,
+          subscription: subscription.toJSON(),
           user_agent: navigator.userAgent,
           updated_at: new Date().toISOString(),
         },
@@ -661,29 +839,35 @@ export default function App() {
       );
 
       if (error) throw error;
+
       setNotificationsEnabled(true);
-      setToast('Mobilní upozornění jsou zapnutá.');
+      setToast('Mobilní upozornění jsou zapnutá na tomto zařízení.');
     } catch (error) {
+      setNotificationsEnabled(false);
       setToast(`Upozornění se nepodařilo zapnout: ${error.message}`);
     }
   }
 
   async function notifyPartner(eventType, title, body) {
-    if (!couple?.id || !session?.user?.id) return;
+    if (!couple?.id || !session?.user?.id || !supabase) return;
 
     try {
-      await supabase.functions.invoke('send-push-notification', {
+      const { error } = await supabase.functions.invoke('send-push-notification', {
         body: {
           coupleId: couple.id,
           senderId: session.user.id,
           eventType,
           title,
           body,
-          url: '/',
+          url: window.location.origin,
         },
       });
-    } catch {
-      // Notifikace nesmí blokovat hlavní akci v aplikaci.
+
+      if (error) {
+        console.warn('Push notification failed:', error.message || error);
+      }
+    } catch (error) {
+      console.warn('Push notification failed:', error);
     }
   }
 
@@ -725,7 +909,27 @@ export default function App() {
     const { data, error } = await supabase.from('kama_progress').select('*').eq('couple_id', coupleId);
     if (error) return setToast(error.message);
 
-    const hydrated = await Promise.all((data || []).map(async (item) => ({ ...item, signedUrl: item.photo_path ? await getSignedUrl(item.photo_path) : null })));
+    const hydrated = await Promise.all((data || []).map(async (item) => {
+      const rawSignedUrl = item.photo_path ? await getSignedUrl(item.photo_path) : null;
+      let displayUrl = rawSignedUrl;
+      let locked = false;
+
+      if (item.encrypted && rawSignedUrl) {
+        if (!encryptionPassphrase) {
+          displayUrl = null;
+          locked = true;
+        } else {
+          try {
+            displayUrl = await decryptSignedUrlToObjectUrl(rawSignedUrl, coupleId, encryptionPassphrase, item.encryption_iv, item.mime_type);
+          } catch {
+            displayUrl = null;
+            locked = true;
+          }
+        }
+      }
+
+      return { ...item, signedUrl: displayUrl, locked };
+    }));
     setKamaProgress(hydrated);
   }
 
@@ -803,10 +1007,17 @@ export default function App() {
     if (!couple?.id || !file) return;
 
     try {
-      const avatarPath = await uploadToStorage(file, `${couple.id}/profile`);
+      if (!encryptionPassphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu.');
+      const uploaded = await uploadToStorage(file, `${couple.id}/profile`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
+      const avatarPath = uploaded.path;
       const { data, error } = await supabase
         .from('couples')
-        .update({ avatar_path: avatarPath })
+        .update({
+          avatar_path: avatarPath,
+          avatar_encrypted: uploaded.encrypted,
+          avatar_encryption_iv: uploaded.encryptionIv,
+          avatar_mime_type: uploaded.mimeType,
+        })
         .eq('id', couple.id)
         .select('*')
         .single();
@@ -814,7 +1025,8 @@ export default function App() {
       if (error) throw error;
 
       setCouple(data);
-      setCoupleAvatarUrl(await getSignedUrl(avatarPath));
+      setCoupleAvatarUrl(await getCoupleAvatarUrl(data));
+      await notifyPartner('couple_avatar_changed', 'MoodSync', 'Partner/ka změnil/a profilovou fotku páru.');
     } catch (error) {
       setToast(`Profilovou fotku se nepodařilo uložit: ${error.message}`);
     }
@@ -835,6 +1047,7 @@ export default function App() {
     if (error) return setToast(error.message);
     setThought('');
     await loadPosts(couple.id);
+    await notifyPartner('thought_added', 'MoodSync', 'Partner/ka ti poslal/a novou myšlenku.');
   }
 
   async function sendMessage() {
@@ -843,13 +1056,16 @@ export default function App() {
     if (error) return setToast(error.message);
     setMessage('');
     await loadPosts(couple.id);
+    await notifyPartner('message_added', 'MoodSync', 'Partner/ka ti poslal/a novou zprávu.');
   }
 
   async function addPhoto(file, options = {}) {
     if (!couple?.id) return setToast('Nejdřív vytvoř nebo připoj pár.');
     if (!file) return;
     try {
-      const imagePath = await uploadToStorage(file, `${couple.id}/gallery`);
+      if (!encryptionPassphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu. Bez něj se intimní fotky nenahrávají.');
+      const uploaded = await uploadToStorage(file, `${couple.id}/gallery`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
+      const imagePath = uploaded.path;
       const { error } = await supabase.from('posts').insert({
         couple_id: couple.id,
         author_id: session.user.id,
@@ -857,6 +1073,9 @@ export default function App() {
         text: options.text?.trim() || 'Soukromá fotka v galerii',
         photo_category: options.photoCategory || (photoCategory === 'all' ? 'romantic' : photoCategory),
         image_path: imagePath,
+        encrypted: uploaded.encrypted,
+        encryption_iv: uploaded.encryptionIv,
+        mime_type: uploaded.mimeType,
       });
       if (error) throw error;
       await loadPosts(couple.id);
@@ -901,6 +1120,7 @@ export default function App() {
     });
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
+    await notifyPartner('challenge_added', 'MoodSync', 'Partner/ka přidal/a novou výzvu.');
   }
 
   async function updateChallenge(id, patch) {
@@ -908,36 +1128,64 @@ export default function App() {
     const { error } = await supabase.from('challenges').update(normalizedPatch).eq('id', id);
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
+    if (patch.completed) {
+      await notifyPartner('challenge_completed', 'MoodSync', 'Partner/ka splnil/a výzvu a získal/a XP.');
+    }
   }
 
   async function toggleKama(positionId) {
     if (!couple?.id) return;
     const existing = kamaProgress.find((item) => item.position_id === positionId);
+    const nextCompleted = existing ? !existing.completed : true;
+
     if (existing) {
-      await supabase.from('kama_progress').update({ completed: !existing.completed, updated_at: new Date().toISOString() }).eq('id', existing.id);
+      await supabase.from('kama_progress').update({ completed: nextCompleted, updated_at: new Date().toISOString() }).eq('id', existing.id);
     } else {
       await supabase.from('kama_progress').insert({ couple_id: couple.id, position_id: positionId, completed: true });
     }
+
     await loadKamaProgress(couple.id);
+
+    if (nextCompleted) {
+      const position = kamaPositions.find((item) => item.id === positionId);
+      await notifyPartner('kamasutra_completed', 'MoodSync', `Partner/ka označil/a polohu ${position?.title || ''} jako splněnou.`);
+    }
   }
 
   async function uploadKamaPhoto(positionId, file) {
     if (!couple?.id || !file) return;
     try {
-      const photoPath = await uploadToStorage(file, `${couple.id}/kamasutra`);
+      if (!encryptionPassphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu. Bez něj se intimní fotky nenahrávají.');
+      const uploaded = await uploadToStorage(file, `${couple.id}/kamasutra`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
+      const photoPath = uploaded.path;
       const existing = kamaProgress.find((item) => item.position_id === positionId);
       if (existing) {
-        await supabase.from('kama_progress').update({ photo_path: photoPath, completed: true, updated_at: new Date().toISOString() }).eq('id', existing.id);
+        await supabase.from('kama_progress').update({ photo_path: photoPath, encrypted: uploaded.encrypted, encryption_iv: uploaded.encryptionIv, mime_type: uploaded.mimeType, completed: true, updated_at: new Date().toISOString() }).eq('id', existing.id);
       } else {
-        await supabase.from('kama_progress').insert({ couple_id: couple.id, position_id: positionId, photo_path: photoPath, completed: true });
+        await supabase.from('kama_progress').insert({ couple_id: couple.id, position_id: positionId, photo_path: photoPath, encrypted: uploaded.encrypted, encryption_iv: uploaded.encryptionIv, mime_type: uploaded.mimeType, completed: true });
       }
       await loadKamaProgress(couple.id);
+      const position = kamaPositions.find((item) => item.id === positionId);
+      await notifyPartner('kamasutra_photo_added', 'MoodSync', `Partner/ka přidal/a fotku k poloze ${position?.title || ''}.`);
     } catch (error) {
       setToast(error.message);
     }
   }
 
+  function saveEncryptionPassphrase(value) {
+    setEncryptionPassphrase(value);
+    if (value) {
+      sessionStorage.setItem(ENC_KEY_SESSION, value);
+      setToast('E2EE heslo je aktivní na tomto zařízení. Nové fotky se budou šifrovat před uploadem.');
+    } else {
+      sessionStorage.removeItem(ENC_KEY_SESSION);
+      setToast('E2EE heslo bylo vymazané z tohoto zařízení.');
+    }
+  }
+
   async function signOut() {
+    sessionStorage.removeItem(ENC_KEY_SESSION);
+    setEncryptionPassphrase('');
     await supabase.auth.signOut();
     setSession(null);
     setCouple(null);
@@ -994,6 +1242,7 @@ export default function App() {
       <main className="box-border min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-gradient-to-br from-pink-100 via-rose-50 to-purple-100 px-3 py-3 pb-28 text-gray-900 transition dark:from-gray-950 dark:via-purple-950 dark:to-rose-950 dark:text-white sm:px-4 sm:py-4 md:px-8 md:py-8 md:pb-28">
         <div className="mx-auto grid w-full max-w-full min-w-0 gap-4 md:max-w-7xl md:gap-6">
           <CompactHeader
+            encryptionReady={encryptionReady}
             profile={profile}
             couple={couple}
             coupleAvatarUrl={coupleAvatarUrl}
@@ -1041,7 +1290,7 @@ export default function App() {
           {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
           {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} stats={challengeStats} />}
           {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
-          {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} signOut={signOut} />}
+          {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
         </div>
 
         {fullscreenImage && <FullscreenImageViewer image={fullscreenImage} onClose={() => setFullscreenImage(null)} />}
@@ -1207,7 +1456,7 @@ function AuthScreen({ dark, setDark }) {
   );
 }
 
-function CompactHeader({ profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, signOut }) {
+function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, signOut }) {
   return (
     <header className="box-border w-full max-w-full overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/80 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:rounded-[2rem] sm:p-4 md:p-5">
       <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:gap-3">
@@ -1221,6 +1470,7 @@ function CompactHeader({ profile, couple, coupleAvatarUrl, dark, setDark, panicM
           </div>
         </div>
         <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
+          <span className={`rounded-xl px-2 py-2 text-[11px] font-black sm:rounded-2xl sm:px-3 sm:text-xs ${encryptionReady ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-gray-900'}`}>{encryptionReady ? 'E2EE' : 'No key'}</span>
           <button onClick={() => setPanicMode(!panicMode)} className="rounded-xl bg-gray-900 px-2 py-2 text-[11px] font-black text-white dark:bg-white dark:text-gray-900 sm:rounded-2xl sm:px-3 sm:text-xs">{panicMode ? 'Blur' : 'Open'}</button>
           <button onClick={enablePushNotifications} className={`rounded-xl px-2 py-2 text-[11px] font-black sm:rounded-2xl sm:px-3 sm:text-xs ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{notificationsEnabled ? 'Notif ON' : 'Notif'}</button>
           <button onClick={() => setDark(!dark)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 sm:h-10 sm:w-10 sm:rounded-2xl">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
@@ -1444,7 +1694,7 @@ function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage
         >
           {galleryOnly ? (
             <>
-              <MediaCard imageUrl={post.signedUrl} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} compact />
+              <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} compact />
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1479,7 +1729,7 @@ function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage
               </div>
               <p className="mt-3 text-lg">{post.text}</p>
               {post.mood_label && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nálada: {post.mood_label}</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Blízkost: {post.closeness}%</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nadrženost: {post.heat}%</div></div>}
-              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} />}
+              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} />}
             </>
           )}
         </article>
@@ -1488,7 +1738,7 @@ function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage
   );
 }
 
-function MediaCard({ blurred, expiresIn, category, imageUrl, openImage, compact = false }) {
+function MediaCard({ blurred, locked, expiresIn, category, imageUrl, openImage, compact = false }) {
   return (
     <div className={`relative overflow-hidden border border-white/20 bg-gradient-to-br from-rose-500 via-fuchsia-500 to-purple-700 ${compact ? 'h-56 rounded-none md:h-72' : 'mt-4 h-72 rounded-3xl'}`}>
       {imageUrl ? (
@@ -1504,7 +1754,13 @@ function MediaCard({ blurred, expiresIn, category, imageUrl, openImage, compact 
           />
         </button>
       ) : (
-        <div className="grid h-full place-items-center text-white"><Image size={48} /></div>
+        <div className="grid h-full place-items-center p-5 text-center text-white">
+          <div>
+            <Lock className="mx-auto mb-3" size={44} />
+            <div className="font-black">{locked ? 'Šifrovaná fotka' : 'Fotka není dostupná'}</div>
+            <p className="mt-2 text-sm text-white/80">{locked ? 'Zadej správné E2EE heslo v profilu.' : 'Zkus obnovit stránku.'}</p>
+          </div>
+        </div>
       )}
       <div className="absolute left-3 top-3 flex flex-wrap gap-2">
         <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">Couple protected</span>
@@ -1563,7 +1819,7 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, oralOnly, set
   const filtered = oralOnly ? filteredBase.filter((position) => position.category === 'Oral') : filteredBase;
   const progressById = Object.fromEntries(kamaProgress.map((item) => [item.position_id, item]));
 
-  return <div className="grid gap-6"><Card><div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Intimacy Explorer</div><h2 className="mt-4 text-4xl font-black">Kamasutra Journey</h2><p className="mt-3 max-w-2xl text-gray-500 dark:text-gray-300">Tracker poloh, fotek po splnění a společných vzpomínek uložený v cloudu.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-6 text-white shadow-2xl"><div className="text-sm font-bold text-white/80">Splněno</div><div className="mt-2 text-7xl font-black">{completed}</div><div className="text-lg font-bold text-white/80">z {kamaPositions.length} poloh</div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap gap-2 items-center">{categories.map((category) => <PillButton key={category} active={kamaFilter === category} onClick={() => setKamaFilter(category)}>{category === 'all' ? 'Všechny' : category}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid gap-6 lg:grid-cols-2">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><div className="grid xl:grid-cols-[0.9fr_1.1fr]"><div className="bg-[#fff7f3] p-5 dark:bg-[#120d18]"><PoseGuide pose={position.pose} title={position.title} /></div><div className="p-6"><h3 className="text-2xl font-black">{position.title}</h3><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{position.difficulty}</span><span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">+{position.xp} XP</span></div><div className="mt-5 space-y-4 text-sm leading-relaxed text-gray-600 dark:text-gray-300"><InstructionBlock number="1" title="Nastavení" text={position.description.setup} /><InstructionBlock number="2" title="Pohyb a tempo" text={position.description.focus} /><InstructionBlock number="3" title="Komfort a bezpečí" text={position.description.comfort} /></div><div className="mt-6 space-y-4"><button onClick={() => toggleKama(position.id)} className={`w-full rounded-2xl py-3 font-black transition ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Označit jako splněné'}</button>{item?.completed && <div className="rounded-3xl border border-pink-200 bg-pink-50 p-4 dark:border-pink-500/20 dark:bg-pink-500/10"><div className="mb-3 text-sm font-black text-pink-700 dark:text-pink-200">Vaše vzpomínka k poloze</div><label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-4 py-6 text-center text-sm font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku páru' : 'Přidat fotku páru'}</label>{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-4 h-72 w-full rounded-3xl object-cover shadow-2xl" />}</div>}</div></div></div></Card>; })}</section></div>;
+  return <div className="grid gap-6"><Card><div className="grid gap-6 lg:grid-cols-[1fr_0.8fr] lg:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Intimacy Explorer</div><h2 className="mt-4 text-4xl font-black">Kamasutra Journey</h2><p className="mt-3 max-w-2xl text-gray-500 dark:text-gray-300">Tracker poloh, fotek po splnění a společných vzpomínek uložený v cloudu.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-6 text-white shadow-2xl"><div className="text-sm font-bold text-white/80">Splněno</div><div className="mt-2 text-7xl font-black">{completed}</div><div className="text-lg font-bold text-white/80">z {kamaPositions.length} poloh</div><div className="mt-5 h-4 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap gap-2 items-center">{categories.map((category) => <PillButton key={category} active={kamaFilter === category} onClick={() => setKamaFilter(category)}>{category === 'all' ? 'Všechny' : category}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid gap-6 lg:grid-cols-2">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><div className="grid xl:grid-cols-[0.9fr_1.1fr]"><div className="bg-[#fff7f3] p-5 dark:bg-[#120d18]"><PoseGuide pose={position.pose} title={position.title} /></div><div className="p-6"><h3 className="text-2xl font-black">{position.title}</h3><div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{position.difficulty}</span><span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200">+{position.xp} XP</span></div><div className="mt-5 space-y-4 text-sm leading-relaxed text-gray-600 dark:text-gray-300"><InstructionBlock number="1" title="Nastavení" text={position.description.setup} /><InstructionBlock number="2" title="Pohyb a tempo" text={position.description.focus} /><InstructionBlock number="3" title="Komfort a bezpečí" text={position.description.comfort} /></div><div className="mt-6 space-y-4"><button onClick={() => toggleKama(position.id)} className={`w-full rounded-2xl py-3 font-black transition ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Označit jako splněné'}</button>{item?.completed && <div className="rounded-3xl border border-pink-200 bg-pink-50 p-4 dark:border-pink-500/20 dark:bg-pink-500/10"><div className="mb-3 text-sm font-black text-pink-700 dark:text-pink-200">Vaše vzpomínka k poloze</div><label className="flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-4 py-6 text-center text-sm font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku páru' : 'Přidat fotku páru'}</label>{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-4 h-72 w-full rounded-3xl object-cover shadow-2xl" />}{item?.locked && <div className="mt-4 rounded-3xl bg-gray-900 p-5 text-center text-sm font-bold text-white"><Lock className="mx-auto mb-2" />Šifrovaná fotka. Zadej správné E2EE heslo v profilu.</div>}</div>}</div></div></div></Card>; })}</section></div>;
 }
 
 function InstructionBlock({ number, title, text }) {
@@ -1577,7 +1833,7 @@ function PoseGuide({ pose, title }) {
   return <div className="rounded-[2rem] border border-gray-200 bg-white p-5 shadow-inner dark:border-white/10 dark:bg-white/5"><div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-pink-200 bg-gradient-to-br from-pink-50 to-rose-50 p-10 text-center dark:border-pink-500/20 dark:from-pink-500/5 dark:to-purple-500/5"><div className="flex h-24 w-24 items-center justify-center rounded-full bg-white shadow-xl dark:bg-white/10"><Icon className="text-pink-500" size={42} /></div><div className="mt-5 text-2xl font-black text-gray-900 dark:text-white">{title}</div><div className="mt-2 rounded-full bg-pink-100 px-4 py-2 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">{guide.label}</div><p className="mt-4 max-w-sm text-sm leading-relaxed text-gray-600 dark:text-gray-300">Ikonový režim. Vlastní fotku můžete přidat po splnění.</p></div></div>;
 }
 
-function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartnerName, updateProfileName, uploadCoupleAvatar, signOut }) {
+function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartnerName, updateProfileName, uploadCoupleAvatar, encryptionPassphrase, saveEncryptionPassphrase, signOut }) {
   return (
     <Card>
       <h2 className="text-3xl font-black">Profil a nastavení</h2>
@@ -1603,8 +1859,22 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
             <TextInput placeholder={profile?.display_name || 'Tvoje jméno'} value={partnerName} onChange={(event) => setPartnerName(event.target.value)} />
             <button onClick={() => updateProfileName(partnerName)} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Uložit</button>
           </div>
+          <div className="mt-6 rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+            <h3 className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="text-emerald-500" /> End-to-end šifrování fotek</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Zadejte společné heslo, které znáte jen vy dva. Galerie, Kamasutra fotky i profilová fotka páru se zašifrují v prohlížeči ještě před uploadem do Supabase.
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <TextInput type="password" placeholder="Společné E2EE heslo" value={encryptionPassphrase} onChange={(event) => saveEncryptionPassphrase(event.target.value)} />
+              <button type="button" onClick={() => saveEncryptionPassphrase('')} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Vymazat z tohoto zařízení</button>
+            </div>
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              Heslo se neukládá do cloudu. Když ho zapomenete, staré šifrované fotky nepůjde obnovit.
+            </p>
+          </div>
+
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <FeatureTile icon={ShieldCheck} title="Supabase RLS" text="Databáze používá Row Level Security a Storage policies podle ID páru, aby pár viděl jen vlastní data." />
+            <FeatureTile icon={ShieldCheck} title="E2EE fotky" text="Fotky se šifrují AES-GCM v prohlížeči ještě před uploadem." />
             <FeatureTile icon={Users} title="Pairing" text="Párovací kód připojí druhý účet do stejného páru." />
             <FeatureTile icon={Wand2} title="Realtime" text="Zprávy, fotky, výzvy a progress se synchronizují přes Supabase Realtime." />
           </div>
