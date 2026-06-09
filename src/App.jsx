@@ -825,8 +825,7 @@ export default function App() {
           user_id: session.user.id,
           subscription: subscription.toJSON(),
           user_agent: navigator.userAgent,
-          updated_at: new Date().toISOString(),
-        },
+          },
         { onConflict: 'user_id' }
       );
 
@@ -1125,6 +1124,83 @@ export default function App() {
     if (patch.completed) {
       await notifyPartner('challenge_completed', 'MoodSync', 'Partner/ka splnil/a výzvu a získal/a XP.');
     }
+  }
+
+
+  async function challengePartner(challenge, hours = 24) {
+    if (!couple?.id || !session?.user?.id || !challenge?.id) return;
+
+    const partnerId = getPartnerUserId();
+    if (!partnerId) {
+      setToast('Partner/ka zatím není v páru aktivní. Jakmile se přihlásí nebo provede první akci, půjde ho/ji vyzvat.');
+      return;
+    }
+
+    const deadline = new Date(Date.now() + Number(hours || 24) * 60 * 60 * 1000).toISOString();
+    const penalty = Number(challenge.penalty_points || challenge.xp || 10);
+
+    const { error } = await supabase
+      .from('challenges')
+      .update({
+        assigned_to: partnerId,
+        challenged_by: session.user.id,
+        challenge_deadline: deadline,
+        challenge_status: 'active',
+        penalty_points: penalty,
+        accepted: true,
+        completed: false,
+        completed_by: null,
+        completed_at: null,
+        failed_at: null,
+        debt_task: null,
+        debt_repaid_at: null,
+      })
+      .eq('id', challenge.id)
+      .eq('couple_id', couple.id);
+
+    if (error) return setToast(`Partnera se nepodařilo vyzvat: ${error.message}`);
+
+    await loadChallenges(couple.id);
+    await notifyPartner('challenge_invited', 'MoodSync', `Partner/ka tě vyzval/a: ${challenge.title}. Termín je ${formatDate(deadline)}.`);
+  }
+
+  async function assignDebtTask(challenge, task) {
+    if (!couple?.id || !challenge?.id || !task) return;
+
+    const { error } = await supabase
+      .from('challenges')
+      .update({
+        debt_task: task,
+        challenge_status: 'debt_assigned',
+      })
+      .eq('id', challenge.id)
+      .eq('couple_id', couple.id);
+
+    if (error) return setToast(`Nápravu se nepodařilo zadat: ${error.message}`);
+
+    await loadChallenges(couple.id);
+    await notifyPartner('debt_task_assigned', 'MoodSync', `Partner/ka ti zadal/a nápravu za nesplněnou výzvu: ${task}.`);
+  }
+
+  async function repayDebt(challenge) {
+    if (!couple?.id || !session?.user?.id || !challenge?.id) return;
+
+    const { error } = await supabase
+      .from('challenges')
+      .update({
+        challenge_status: 'debt_repaid',
+        debt_repaid_at: new Date().toISOString(),
+        completed: true,
+        completed_by: session.user.id,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', challenge.id)
+      .eq('couple_id', couple.id);
+
+    if (error) return setToast(`Dluh se nepodařilo smazat: ${error.message}`);
+
+    await loadChallenges(couple.id);
+    await notifyPartner('debt_repaid', 'MoodSync', 'Partner/ka splnil/a nápravu a smazal/a dluh.');
   }
 
   async function toggleKama(positionId) {
