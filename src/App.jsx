@@ -8,8 +8,11 @@ import {
   ZapOff,
   Award,
   Bell,
+  CalendarDays,
+  CheckCircle2,
   Clock,
   Copy,
+  Dice5,
   Flame,
   Gift,
   Heart,
@@ -26,6 +29,7 @@ import {
   Sun,
   Trophy,
   Target,
+  TrendingUp,
   User,
   Users,
   Wand2,
@@ -89,6 +93,61 @@ const rewardTiers = [
   { level: 4, title: 'Magnetismus', minXp: 220, reward: 'Odemčeno: Soukromé rituály' },
   { level: 5, title: 'Power Couple', minXp: 360, reward: 'Odemčeno: Premium intimacy vault' },
 ];
+
+const partnerDayCards = [
+  { compliment: 'Řekni partnerovi jednu věc, které si na něm dnes opravdu vážíš.', question: 'Co by ti dnes udělalo největší radost?', challenge: 'Dejte si večer 15 minut bez mobilu jen pro sebe.', xp: 10 },
+  { compliment: 'Pošli partnerovi zprávu s jedním detailem, který tě na něm přitahuje.', question: 'Kdy ses se mnou naposledy cítil/a nejvíc blízko?', challenge: 'Naplánujte si malý společný rituál na dnešní večer.', xp: 12 },
+  { compliment: 'Připomeň partnerovi jeden moment, kdy tě opravdu rozesmál.', question: 'Co bych pro tebe mohl/a tento týden udělat?', challenge: 'Vyberte jednu fotku do galerie jako dnešní vzpomínku.', xp: 8 },
+  { compliment: 'Řekni partnerovi, co na něm obdivuješ mimo vzhled.', question: 'Co bys chtěl/a v našem vztahu častěji?', challenge: 'Splňte jednu lehkou romantickou výzvu.', xp: 10 },
+  { compliment: 'Pošli partnerovi krátké „myslím na tebe“ v průběhu dne.', question: 'Jakou náladu bys chtěl/a dnes večer vytvořit?', challenge: 'Vyberte jednu věc z wishlistu a naplánujte ji.', xp: 14 },
+];
+
+const surpriseIdeas = [
+  { type: 'Otázka', text: 'Jaký malý dotek nebo gesto ti nejvíc dává pocit, že jsem tu pro tebe?' },
+  { type: 'Mini výzva', text: 'Pošli partnerovi jeden kompliment a jednu věc, na kterou se spolu těšíš.' },
+  { type: 'Romantika', text: 'Dejte si dnes večer deset minut jen objetí, bez telefonu a bez řešení povinností.' },
+  { type: 'Flirt', text: 'Pošli partnerovi nenápadnou flirtovací zprávu během dne.' },
+  { type: 'Kamasutra tip', text: 'Vyberte jednu romantickou nebo začátečnickou polohu a označte ji jako plán na později.' },
+];
+
+function getTodaySeed() {
+  const today = new Date().toISOString().slice(0, 10);
+  return today.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
+
+function getPartnerDayCard() {
+  return partnerDayCards[getTodaySeed() % partnerDayCards.length];
+}
+
+function getRelationshipScoreData({ ownCloseness, ownHeat, partnerCloseness, partnerHeat, posts, challenges }) {
+  const recentPosts = posts.filter((post) => Date.now() - new Date(post.created_at).getTime() < 7 * 24 * 60 * 60 * 1000).length;
+  const completedChallenges = challenges.filter((challenge) => challenge.completed).length;
+  const activeChallenges = challenges.filter((challenge) => challenge.challenge_status === 'active').length;
+  const closenessScore = Math.round(((Number(ownCloseness) || 0) + (Number(partnerCloseness) || 0)) / 2);
+  const heatBalance = Math.max(0, 100 - Math.abs((Number(ownHeat) || 0) - (Number(partnerHeat) || 0)));
+  const activityScore = Math.min(100, recentPosts * 8 + completedChallenges * 6 + activeChallenges * 4);
+  const score = Math.round(closenessScore * 0.55 + heatBalance * 0.2 + activityScore * 0.25);
+  const trend = Math.max(-12, Math.min(18, Math.round((recentPosts + completedChallenges) / 2) - 3));
+  return { score: Math.max(0, Math.min(100, score)), trend };
+}
+
+function buildRelationshipHistory(posts, ownCloseness, partnerCloseness, ownHeat, partnerHeat) {
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const key = date.toISOString().slice(0, 10);
+    const dayPosts = posts.filter((post) => String(post.created_at || '').startsWith(key));
+    const moodPosts = dayPosts.filter((post) => post.type === 'mood');
+    const activityBoost = Math.min(20, dayPosts.length * 4);
+    const base = Math.round(((ownCloseness || 0) + (partnerCloseness || 0) + (100 - Math.abs((ownHeat || 0) - (partnerHeat || 0)))) / 3);
+    const moodBoost = Math.min(15, moodPosts.length * 5);
+    return {
+      label: date.toLocaleDateString('cs-CZ', { weekday: 'short' }),
+      value: Math.max(8, Math.min(100, base + activityBoost + moodBoost - (6 - index) * 2)),
+    };
+  });
+  return days;
+}
 
 const starterChallenges = [
   {
@@ -310,6 +369,22 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'bez termínu';
   return new Intl.DateTimeFormat('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+
+function formatTimeLeft(value) {
+  if (!value) return 'bez termínu';
+  const diff = new Date(value).getTime() - Date.now();
+  if (Number.isNaN(diff)) return 'bez termínu';
+  if (diff <= 0) return 'termín vypršel';
+  const minutes = Math.ceil(diff / 60000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  if (hours < 24) return restMinutes ? `${hours} h ${restMinutes} min` : `${hours} h`;
+  const days = Math.floor(hours / 24);
+  const restHours = hours % 24;
+  return restHours ? `${days} d ${restHours} h` : `${days} d`;
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -535,6 +610,9 @@ export default function App() {
   const [coupleMembers, setCoupleMembers] = useState([]);
   const [challenges, setChallenges] = useState([]);
   const [kamaProgress, setKamaProgress] = useState([]);
+  const [wishlistItems, setWishlistItems] = useState([]);
+  const [milestones, setMilestones] = useState([]);
+  const [surpriseCard, setSurpriseCard] = useState(null);
   const [selectedMoodId, setSelectedMoodId] = useState(local.selectedMoodId || 'love');
   const [heat, setHeat] = useState(local.heat ?? 50);
   const [closeness, setCloseness] = useState(local.closeness ?? 70);
@@ -612,6 +690,8 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kama_progress', filter: `couple_id=eq.${couple.id}` }, () => loadKamaProgress(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_status', filter: `couple_id=eq.${couple.id}` }, () => loadCoupleStatuses(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_members', filter: `couple_id=eq.${couple.id}` }, () => loadCoupleMembers(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_wishlist', filter: `couple_id=eq.${couple.id}` }, () => loadWishlistItems(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_milestones', filter: `couple_id=eq.${couple.id}` }, () => loadMilestones(couple.id))
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -637,7 +717,7 @@ export default function App() {
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id)]);
+        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -726,6 +806,35 @@ export default function App() {
     const { data, error } = await supabase.from('couple_members').select('*').eq('couple_id', coupleId);
     if (error) return setToast(error.message);
     setCoupleMembers(data || []);
+  }
+
+
+  async function loadWishlistItems(coupleId) {
+    if (!supabase || !coupleId) return;
+    const { data, error } = await supabase
+      .from('couple_wishlist')
+      .select('*')
+      .eq('couple_id', coupleId)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.warn('Wishlist not loaded:', error.message || error);
+      return;
+    }
+    setWishlistItems(data || []);
+  }
+
+  async function loadMilestones(coupleId) {
+    if (!supabase || !coupleId) return;
+    const { data, error } = await supabase
+      .from('couple_milestones')
+      .select('*')
+      .eq('couple_id', coupleId)
+      .order('date', { ascending: true });
+    if (error) {
+      console.warn('Milestones not loaded:', error.message || error);
+      return;
+    }
+    setMilestones(data || []);
   }
 
   function getPartnerUserId() {
@@ -826,7 +935,8 @@ export default function App() {
           user_id: session.user.id,
           subscription: subscription.toJSON(),
           user_agent: navigator.userAgent,
-          },
+          updated_at: new Date().toISOString(),
+        },
         { onConflict: 'user_id' }
       );
 
@@ -1266,6 +1376,63 @@ export default function App() {
     }
   }
 
+
+  async function addWishlistItem(title) {
+    if (!couple?.id || !session?.user?.id || !title?.trim()) return;
+    const { error } = await supabase.from('couple_wishlist').insert({
+      couple_id: couple.id,
+      user_id: session.user.id,
+      title: title.trim(),
+      fulfilled: false,
+    });
+    if (error) return setToast(`Přání se nepodařilo uložit: ${error.message}`);
+    await loadWishlistItems(couple.id);
+    await addSystemPost('wishlist', `Nové přání ve wishlistu: ${title.trim()}`);
+    await notifyPartner('wishlist_added', 'MoodSync přání', `Partner/ka přidal/a nové přání: ${title.trim()}.`);
+  }
+
+  async function completeWishlistItem(item) {
+    if (!couple?.id || !session?.user?.id || !item?.id) return;
+    const { error } = await supabase.from('couple_wishlist').update({
+      fulfilled: true,
+      fulfilled_by: session.user.id,
+      fulfilled_at: new Date().toISOString(),
+    }).eq('id', item.id).eq('couple_id', couple.id);
+    if (error) return setToast(`Přání se nepodařilo splnit: ${error.message}`);
+    await loadWishlistItems(couple.id);
+    await addSystemPost('wishlist', `Splněné přání: ${item.title}`);
+    await notifyPartner('wishlist_completed', 'MoodSync přání', `Partner/ka splnil/a přání: ${item.title}.`);
+  }
+
+  async function addMilestone(title, date) {
+    if (!couple?.id || !session?.user?.id || !title?.trim() || !date) return;
+    const { error } = await supabase.from('couple_milestones').insert({
+      couple_id: couple.id,
+      user_id: session.user.id,
+      title: title.trim(),
+      date,
+    });
+    if (error) return setToast(`Vzpomínku se nepodařilo uložit: ${error.message}`);
+    await loadMilestones(couple.id);
+    await addSystemPost('milestone', `Nový důležitý den: ${title.trim()} · ${new Date(date).toLocaleDateString('cs-CZ')}`);
+    await notifyPartner('milestone_added', 'MoodSync vzpomínka', `Partner/ka přidal/a důležitý den: ${title.trim()}.`);
+  }
+
+  async function createSurprise() {
+    const ideas = [...surpriseIdeas];
+    const kamaPick = kamaPositions[(getTodaySeed() + posts.length + challenges.length) % kamaPositions.length];
+    ideas.push({ type: 'Kamasutra', text: `Zkuste si prohlédnout polohu ${kamaPick.title} a domluvit, jestli vás láká.` });
+    const idea = ideas[Math.floor(Math.random() * ideas.length)];
+    setSurpriseCard(idea);
+    await addSystemPost('surprise', `Překvap nás: ${idea.type} · ${idea.text}`);
+    await notifyPartner('surprise_generated', 'MoodSync překvapení', `Partner/ka vygeneroval/a překvapení: ${idea.type}.`);
+  }
+
+  async function testPushNotification() {
+    await notifyPartner('push_test', 'MoodSync test', `${profile?.display_name || 'Partner/ka'} testuje push notifikace.`);
+    setToast('Testovací push notifikace byla odeslána partnerovi/partnerce. Pokud nedorazí, zkontroluj push_subscriptions a Edge Function logs.');
+  }
+
   function saveEncryptionPassphrase(value) {
     setEncryptionPassphrase(value);
     if (value) {
@@ -1288,6 +1455,9 @@ export default function App() {
     setKamaProgress([]);
     setCoupleStatuses([]);
     setCoupleMembers([]);
+    setWishlistItems([]);
+    setMilestones([]);
+    setSurpriseCard(null);
   }
 
   const filteredPosts = useMemo(() => {
@@ -1347,6 +1517,7 @@ export default function App() {
             setPanicMode={setPanicMode}
             notificationsEnabled={notificationsEnabled}
             enablePushNotifications={enablePushNotifications}
+            testPushNotification={testPushNotification}
             signOut={signOut}
           />
 
@@ -1378,6 +1549,20 @@ export default function App() {
               partnerName={partnerName}
               setPartnerName={setPartnerName}
               updateProfileName={updateProfileName}
+              activeChallenges={challenges}
+              currentUserId={session?.user?.id}
+              updateChallenge={updateChallenge}
+              openChallenges={() => setActiveTab('challenges')}
+              posts={posts}
+              challenges={challenges}
+              challengeStats={challengeStats}
+              wishlistItems={wishlistItems}
+              addWishlistItem={addWishlistItem}
+              completeWishlistItem={completeWishlistItem}
+              milestones={milestones}
+              addMilestone={addMilestone}
+              surpriseCard={surpriseCard}
+              createSurprise={createSurprise}
             />
           )}
 
@@ -1583,7 +1768,7 @@ function AuthScreen({ dark, setDark }) {
   );
 }
 
-function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, signOut }) {
+function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, testPushNotification, signOut }) {
   return (
     <header className="box-border w-full max-w-full overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/80 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:rounded-[2rem] sm:p-4 md:p-5">
       <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:gap-3">
@@ -1600,6 +1785,7 @@ function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark
           <span className={`rounded-xl px-2 py-2 text-[11px] font-black sm:rounded-2xl sm:px-3 sm:text-xs ${encryptionReady ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-gray-900'}`}>{encryptionReady ? 'E2EE' : 'No key'}</span>
           <button onClick={() => setPanicMode(!panicMode)} className="rounded-xl bg-gray-900 px-2 py-2 text-[11px] font-black text-white dark:bg-white dark:text-gray-900 sm:rounded-2xl sm:px-3 sm:text-xs">{panicMode ? 'Blur' : 'Open'}</button>
           <button onClick={enablePushNotifications} className={`rounded-xl px-2 py-2 text-[11px] font-black sm:rounded-2xl sm:px-3 sm:text-xs ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{notificationsEnabled ? 'Notif ON' : 'Notif'}</button>
+          {notificationsEnabled && <button onClick={testPushNotification} className="rounded-xl bg-violet-500 px-2 py-2 text-[11px] font-black text-white sm:rounded-2xl sm:px-3 sm:text-xs">Test</button>}
           <button onClick={() => setDark(!dark)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 sm:h-10 sm:w-10 sm:rounded-2xl">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
           <button onClick={signOut} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gray-200 dark:border-white/10 sm:h-10 sm:w-10 sm:rounded-2xl"><LogOut size={18} /></button>
         </div>
@@ -1630,7 +1816,7 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
   );
 }
 
-function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName }) {
+function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, updateChallenge, openChallenges, posts = [], challenges = [], challengeStats = {}, wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise }) {
   const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
   const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
   const ownMood = freshOwnStatus?.mood_label ? getMoodByLabel(freshOwnStatus.mood_label) : latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
@@ -1639,6 +1825,11 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
   const ownCloseness = freshOwnStatus?.closeness ?? closeness;
   const partnerHeat = freshPartnerStatus?.heat ?? 0;
   const partnerCloseness = freshPartnerStatus?.closeness ?? 0;
+  const incomingChallenge = activeChallenges.find((challenge) => challenge.challenge_status === 'active' && challenge.assigned_to === currentUserId && !challenge.completed) || null;
+  const outgoingCount = activeChallenges.filter((challenge) => challenge.challenge_status === 'active' && challenge.challenged_by === currentUserId && !challenge.completed).length;
+  const relationshipScore = getRelationshipScoreData({ ownCloseness, ownHeat, partnerCloseness, partnerHeat, posts, challenges });
+  const relationshipHistory = buildRelationshipHistory(posts, ownCloseness, partnerCloseness, ownHeat, partnerHeat);
+  const partnerDay = getPartnerDayCard();
 
   return (
     <>
@@ -1664,6 +1855,20 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         </Card>
       </section>
 
+      <ActiveChallengeHomeCard challenge={incomingChallenge} outgoingCount={outgoingCount} updateChallenge={updateChallenge} openChallenges={openChallenges} />
+
+      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <RelationshipScoreCard score={relationshipScore.score} trend={relationshipScore.trend} history={relationshipHistory} />
+        <PartnerDayCard card={partnerDay} />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <WishlistHomeCard items={wishlistItems} currentUserId={currentUserId} addWishlistItem={addWishlistItem} completeWishlistItem={completeWishlistItem} />
+        <SurpriseHomeCard surprise={surpriseCard} createSurprise={createSurprise} />
+      </section>
+
+      <MilestonesHomeCard milestones={milestones} addMilestone={addMilestone} />
+
       <RelationshipOverview ownHeat={ownHeat} ownCloseness={ownCloseness} partnerHeat={partnerHeat} partnerCloseness={partnerCloseness} hasPartnerMood={Boolean(freshPartnerStatus)} />
 
       <Card>
@@ -1684,6 +1889,204 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         </div>
       </Card>
     </>
+  );
+}
+
+
+function RelationshipScoreCard({ score, trend, history }) {
+  return (
+    <Card className="bg-gradient-to-br from-white/90 to-pink-50/90 dark:from-white/[0.08] dark:to-fuchsia-500/[0.08]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">
+            <TrendingUp size={15} /> Vztahové skóre
+          </div>
+          <div className="mt-3 text-6xl font-black tracking-tight text-gray-900 dark:text-white">{score}%</div>
+          <p className="mt-1 text-sm font-bold text-gray-500 dark:text-gray-300">{trend >= 0 ? `↗ +${trend} % oproti minulému týdnu` : `↘ ${trend} % oproti minulému týdnu`}</p>
+        </div>
+        <div className="grid h-20 w-20 shrink-0 place-items-center rounded-[1.5rem] bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-xl">
+          <Heart size={34} />
+        </div>
+      </div>
+      <div className="mt-5 flex h-28 items-end gap-2 rounded-3xl bg-white/70 p-3 dark:bg-white/5">
+        {history.map((item) => (
+          <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
+            <div className="w-full rounded-t-2xl bg-gradient-to-t from-pink-500 to-purple-500" style={{ height: `${Math.max(12, item.value)}%` }} />
+            <span className="text-[10px] font-black text-gray-500 dark:text-gray-400">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function PartnerDayCard({ card }) {
+  return (
+    <Card className="bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 text-white">
+      <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black backdrop-blur">
+        <Sparkles size={15} /> Partner dne
+      </div>
+      <h3 className="mt-4 text-2xl font-black">Dnešní malý rituál</h3>
+      <div className="mt-4 grid gap-3 text-sm">
+        <div className="rounded-2xl bg-white/15 p-3"><b>Kompliment:</b> {card.compliment}</div>
+        <div className="rounded-2xl bg-white/15 p-3"><b>Otázka:</b> {card.question}</div>
+        <div className="rounded-2xl bg-white/15 p-3"><b>Mini výzva:</b> {card.challenge}</div>
+      </div>
+      <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-xs font-black text-pink-600">+{card.xp} XP za splnění</div>
+    </Card>
+  );
+}
+
+function WishlistHomeCard({ items, currentUserId, addWishlistItem, completeWishlistItem }) {
+  const [title, setTitle] = useState('');
+  const openItems = items.filter((item) => !item.fulfilled).slice(0, 5);
+  function submit() {
+    if (!title.trim()) return;
+    addWishlistItem?.(title);
+    setTitle('');
+  }
+  return (
+    <Card>
+      <h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-pink-500" /> Wishlist přání</h3>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Přidejte si přání, která může partner/ka splnit pro radost nebo smazání dluhu.</p>
+      <div className="mt-4 flex gap-2">
+        <TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Masáž, večeře, wellness..." />
+        <button onClick={submit} className="rounded-2xl bg-pink-500 px-4 py-2 font-black text-white">Přidat</button>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {openItems.length === 0 && <div className="rounded-2xl bg-pink-50 p-4 text-sm font-bold text-gray-500 dark:bg-white/5 dark:text-gray-300">Zatím žádná otevřená přání.</div>}
+        {openItems.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-pink-100 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
+            <div className="min-w-0">
+              <div className="truncate font-black">{item.title}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{item.user_id === currentUserId ? 'Moje přání' : 'Přání partnera/partnerky'}</div>
+            </div>
+            <button onClick={() => completeWishlistItem?.(item)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white">Splnit</button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function SurpriseHomeCard({ surprise, createSurprise }) {
+  return (
+    <Card>
+      <h3 className="flex items-center gap-2 text-xl font-black"><Dice5 className="text-purple-500" /> Překvap nás</h3>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Jedním klikem vyberete otázku, mini výzvu, romantický nápad nebo Kamasutra tip.</p>
+      <div className="mt-4 rounded-3xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-5 dark:from-purple-500/20 dark:to-pink-500/20">
+        {surprise ? (
+          <>
+            <div className="text-xs font-black uppercase tracking-wide text-pink-500">{surprise.type}</div>
+            <div className="mt-2 text-lg font-black">{surprise.text}</div>
+          </>
+        ) : (
+          <div className="text-sm font-bold text-gray-500 dark:text-gray-300">Zatím není vybrané žádné překvapení.</div>
+        )}
+      </div>
+      <button onClick={createSurprise} className="mt-4 w-full rounded-2xl bg-purple-500 px-5 py-3 font-black text-white">Vygenerovat překvapení</button>
+    </Card>
+  );
+}
+
+function MilestonesHomeCard({ milestones, addMilestone }) {
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const upcoming = [...milestones].sort((a, b) => nextOccurrence(a.date) - nextOccurrence(b.date)).slice(0, 3);
+  function submit() {
+    if (!title.trim() || !date) return;
+    addMilestone?.(title, date);
+    setTitle('');
+    setDate('');
+  }
+  return (
+    <Card>
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h3 className="flex items-center gap-2 text-xl font-black"><CalendarDays className="text-pink-500" /> Naše důležité dny</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Výročí, první rande, svatba nebo společná dovolená.</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_160px_auto]">
+          <TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="První rande" />
+          <TextInput type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          <button onClick={submit} className="rounded-2xl bg-gray-900 px-4 py-3 font-black text-white dark:bg-white dark:text-gray-900">Přidat</button>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {upcoming.length === 0 && <div className="rounded-2xl bg-pink-50 p-4 text-sm font-bold text-gray-500 dark:bg-white/5 dark:text-gray-300">Zatím nemáte uložené žádné důležité dny.</div>}
+        {upcoming.map((item) => (
+          <div key={item.id} className="rounded-3xl border border-pink-100 bg-pink-50 p-4 dark:border-white/10 dark:bg-white/5">
+            <div className="font-black">{item.title}</div>
+            <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">{new Date(item.date).toLocaleDateString('cs-CZ')}</div>
+            <div className="mt-3 rounded-full bg-white px-3 py-1 text-xs font-black text-pink-700 dark:bg-white/10 dark:text-pink-200">za {daysUntil(item.date)} dní</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function nextOccurrence(dateString) {
+  const source = new Date(dateString);
+  const now = new Date();
+  const next = new Date(now.getFullYear(), source.getMonth(), source.getDate());
+  if (next < new Date(now.getFullYear(), now.getMonth(), now.getDate())) next.setFullYear(next.getFullYear() + 1);
+  return next;
+}
+
+function daysUntil(dateString) {
+  const diff = nextOccurrence(dateString).getTime() - new Date().setHours(0, 0, 0, 0);
+  return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
+}
+
+
+function ActiveChallengeHomeCard({ challenge, outgoingCount, updateChallenge, openChallenges }) {
+  if (!challenge && !outgoingCount) return null;
+
+  return (
+    <Card className="border-pink-400/60 bg-gradient-to-br from-pink-500/15 via-purple-500/15 to-rose-500/10 dark:border-pink-500/30 dark:from-pink-500/15 dark:via-purple-500/15 dark:to-rose-500/10">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 rounded-full bg-pink-500 px-3 py-1 text-xs font-black text-white shadow-lg shadow-pink-500/20">
+            <Clock size={15} /> Aktivní výzva
+          </div>
+          {challenge ? (
+            <>
+              <h3 className="mt-3 text-2xl font-black">Partner/ka tě vyzval/a</h3>
+              <p className="mt-2 text-base font-bold text-gray-700 dark:text-gray-200">{challenge.title}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-sm font-black">
+                <span className="rounded-full bg-white px-3 py-2 text-pink-700 dark:bg-white/10 dark:text-pink-200">Zbývá: {formatTimeLeft(challenge.challenge_deadline)}</span>
+                <span className="rounded-full bg-white px-3 py-2 text-purple-700 dark:bg-white/10 dark:text-purple-200">Odměna +{challenge.xp || 10} XP</span>
+                <span className="rounded-full bg-white px-3 py-2 text-amber-700 dark:bg-white/10 dark:text-amber-200">Nesplnění -{challenge.penalty_points || challenge.xp || 10}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="mt-3 text-2xl font-black">Čekáš na partnera/partnerku</h3>
+              <p className="mt-2 text-base font-bold text-gray-700 dark:text-gray-200">Máš aktivní odeslané výzvy: {outgoingCount}. Sleduj jejich stav v sekci Výzvy.</p>
+            </>
+          )}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[320px]">
+          {challenge && (
+            <button
+              type="button"
+              onClick={() => updateChallenge?.(challenge.id, { completed: true, accepted: true, completed_at: new Date().toISOString(), challenge_status: 'completed' })}
+              className="rounded-2xl bg-emerald-500 px-5 py-3 font-black text-white shadow-lg shadow-emerald-500/20"
+            >
+              Splnit výzvu
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={openChallenges}
+            className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900"
+          >
+            Zobrazit výzvy
+          </button>
+        </div>
+      </div>
+    </Card>
   );
 }
 
