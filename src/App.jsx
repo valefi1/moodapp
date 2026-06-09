@@ -115,6 +115,13 @@ function getTodaySeed() {
   return today.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getPartnerDayCard() {
   return partnerDayCards[getTodaySeed() % partnerDayCards.length];
 }
@@ -484,7 +491,7 @@ function getPushSupportMessage() {
   return '';
 }
 
-function getChallengeStats(challenges, currentUserId) {
+function getChallengeStats(challenges, currentUserId, partnerDayCompletions = []) {
   const completed = challenges.filter((challenge) => challenge.completed);
   const activeDuels = challenges.filter((challenge) => challenge.challenge_status === 'active');
   const failedDuels = challenges.filter((challenge) => ['failed', 'debt_assigned'].includes(challenge.challenge_status));
@@ -492,7 +499,10 @@ function getChallengeStats(challenges, currentUserId) {
 
   const completedXpFor = (userId) => completed
     .filter((challenge) => challenge.completed_by === userId)
-    .reduce((sum, challenge) => sum + (challenge.xp || 10), 0);
+    .reduce((sum, challenge) => sum + (challenge.xp || 10), 0)
+    + partnerDayCompletions
+      .filter((item) => item.user_id === userId)
+      .reduce((sum, item) => sum + (item.xp || 0), 0);
 
   const penaltyFor = (userId) => failedDuels
     .filter((challenge) => challenge.assigned_to === userId)
@@ -503,8 +513,10 @@ function getChallengeStats(challenges, currentUserId) {
     .reduce((sum, challenge) => sum + (challenge.penalty_points || challenge.xp || 10), 0);
 
   const myXp = completedXpFor(currentUserId) - penaltyFor(currentUserId) + repaidFor(currentUserId);
-  const partnerIds = [...new Set(challenges.flatMap((challenge) => [challenge.completed_by, challenge.assigned_to, challenge.challenged_by]).filter(Boolean))]
-    .filter((id) => id !== currentUserId);
+  const partnerIds = [...new Set([
+    ...challenges.flatMap((challenge) => [challenge.completed_by, challenge.assigned_to, challenge.challenged_by]).filter(Boolean),
+    ...partnerDayCompletions.map((item) => item.user_id).filter(Boolean),
+  ])].filter((id) => id !== currentUserId);
   const partnerId = partnerIds[0];
   const partnerXp = partnerId ? completedXpFor(partnerId) - penaltyFor(partnerId) + repaidFor(partnerId) : 0;
   const coupleXp = Math.max(0, myXp) + Math.max(0, partnerXp);
@@ -612,6 +624,7 @@ export default function App() {
   const [kamaProgress, setKamaProgress] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [milestones, setMilestones] = useState([]);
+  const [partnerDayCompletions, setPartnerDayCompletions] = useState([]);
   const [surpriseCard, setSurpriseCard] = useState(null);
   const [selectedMoodId, setSelectedMoodId] = useState(local.selectedMoodId || 'love');
   const [heat, setHeat] = useState(local.heat ?? 50);
@@ -692,6 +705,7 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_members', filter: `couple_id=eq.${couple.id}` }, () => loadCoupleMembers(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_wishlist', filter: `couple_id=eq.${couple.id}` }, () => loadWishlistItems(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_milestones', filter: `couple_id=eq.${couple.id}` }, () => loadMilestones(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_day_completions', filter: `couple_id=eq.${couple.id}` }, () => loadPartnerDayCompletions(couple.id))
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -717,7 +731,7 @@ export default function App() {
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id)]);
+        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -835,6 +849,23 @@ export default function App() {
       return;
     }
     setMilestones(data || []);
+  }
+
+  async function loadPartnerDayCompletions(coupleId) {
+    if (!supabase || !coupleId) return;
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { data, error } = await supabase
+      .from('partner_day_completions')
+      .select('*')
+      .eq('couple_id', coupleId)
+      .gte('completion_date', thirtyDaysAgo.toISOString().slice(0, 10))
+      .order('completion_date', { ascending: false });
+    if (error) {
+      console.warn('Partner day completions not loaded:', error.message || error);
+      return;
+    }
+    setPartnerDayCompletions(data || []);
   }
 
   function getPartnerUserId() {
@@ -1428,6 +1459,27 @@ export default function App() {
     await notifyPartner('surprise_generated', 'MoodSync překvapení', `Partner/ka vygeneroval/a překvapení: ${idea.type}.`);
   }
 
+  async function completePartnerDay(card) {
+    if (!couple?.id || !session?.user?.id || !card) return;
+    const completionDate = getLocalDateKey();
+    const { error } = await supabase.from('partner_day_completions').upsert(
+      {
+        couple_id: couple.id,
+        user_id: session.user.id,
+        completion_date: completionDate,
+        card_key: `${completionDate}-${card.challenge}`,
+        xp: Number(card.xp) || 10,
+        completed_at: new Date().toISOString(),
+      },
+      { onConflict: 'couple_id,user_id,completion_date' }
+    );
+    if (error) return setToast(`Partner dne se nepodařilo splnit: ${error.message}`);
+    await loadPartnerDayCompletions(couple.id);
+    await addSystemPost('partner_day', `Partner dne splněn: ${card.challenge} · +${card.xp || 10} XP`);
+    await notifyPartner('partner_day_completed', 'MoodSync Partner dne', `Partner/ka splnil/a dnešní rituál a získal/a +${card.xp || 10} XP.`);
+    setToast(`Partner dne splněn. Získáváš +${card.xp || 10} XP.`);
+  }
+
   async function testPushNotification() {
     await notifyPartner('push_test', 'MoodSync test', `${profile?.display_name || 'Partner/ka'} testuje push notifikace.`);
     setToast('Testovací push notifikace byla odeslána partnerovi/partnerce. Pokud nedorazí, zkontroluj push_subscriptions a Edge Function logs.');
@@ -1457,6 +1509,7 @@ export default function App() {
     setCoupleMembers([]);
     setWishlistItems([]);
     setMilestones([]);
+    setPartnerDayCompletions([]);
     setSurpriseCard(null);
   }
 
@@ -1468,7 +1521,7 @@ export default function App() {
 
   const photoPosts = filteredPosts.filter((post) => post.type === 'photo');
   const filteredChallenges = challenges.filter((challenge) => challengeCategory === 'all' || challenge.category === challengeCategory);
-  const challengeStats = getChallengeStats(challenges, session?.user?.id);
+  const challengeStats = getChallengeStats(challenges, session?.user?.id, partnerDayCompletions);
 
   const latestOwnMoodPost = useMemo(
     () => posts.find((post) => post.type === 'mood' && post.author_id === session?.user?.id) || null,
@@ -1563,6 +1616,8 @@ export default function App() {
               addMilestone={addMilestone}
               surpriseCard={surpriseCard}
               createSurprise={createSurprise}
+              partnerDayCompletions={partnerDayCompletions}
+              completePartnerDay={completePartnerDay}
             />
           )}
 
@@ -1816,7 +1871,7 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
   );
 }
 
-function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, updateChallenge, openChallenges, posts = [], challenges = [], challengeStats = {}, wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise }) {
+function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, updateChallenge, openChallenges, posts = [], challenges = [], challengeStats = {}, wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay }) {
   const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
   const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
   const ownMood = freshOwnStatus?.mood_label ? getMoodByLabel(freshOwnStatus.mood_label) : latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
@@ -1830,6 +1885,8 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
   const relationshipScore = getRelationshipScoreData({ ownCloseness, ownHeat, partnerCloseness, partnerHeat, posts, challenges });
   const relationshipHistory = buildRelationshipHistory(posts, ownCloseness, partnerCloseness, ownHeat, partnerHeat);
   const partnerDay = getPartnerDayCard();
+  const todayKey = getLocalDateKey();
+  const partnerDayCompletion = partnerDayCompletions.find((item) => item.user_id === currentUserId && item.completion_date === todayKey) || null;
 
   return (
     <>
@@ -1859,7 +1916,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
 
       <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <RelationshipScoreCard score={relationshipScore.score} trend={relationshipScore.trend} history={relationshipHistory} />
-        <PartnerDayCard card={partnerDay} />
+        <PartnerDayCard card={partnerDay} completion={partnerDayCompletion} completePartnerDay={completePartnerDay} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
@@ -1920,19 +1977,33 @@ function RelationshipScoreCard({ score, trend, history }) {
   );
 }
 
-function PartnerDayCard({ card }) {
+function PartnerDayCard({ card, completion, completePartnerDay }) {
+  const completed = Boolean(completion);
   return (
     <Card className="bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 text-white">
-      <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black backdrop-blur">
-        <Sparkles size={15} /> Partner dne
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black backdrop-blur">
+            <Sparkles size={15} /> Partner dne
+          </div>
+          <h3 className="mt-4 text-2xl font-black">Dnešní malý rituál</h3>
+        </div>
+        <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-pink-600">+{card.xp} XP</div>
       </div>
-      <h3 className="mt-4 text-2xl font-black">Dnešní malý rituál</h3>
       <div className="mt-4 grid gap-3 text-sm">
         <div className="rounded-2xl bg-white/15 p-3"><b>Kompliment:</b> {card.compliment}</div>
         <div className="rounded-2xl bg-white/15 p-3"><b>Otázka:</b> {card.question}</div>
         <div className="rounded-2xl bg-white/15 p-3"><b>Mini výzva:</b> {card.challenge}</div>
       </div>
-      <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-xs font-black text-pink-600">+{card.xp} XP za splnění</div>
+      <button
+        type="button"
+        disabled={completed}
+        onClick={() => completePartnerDay?.(card)}
+        className={`mt-4 w-full rounded-2xl px-5 py-3 text-sm font-black transition ${completed ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-pink-600 hover:bg-pink-50'}`}
+      >
+        {completed ? `✓ Splněno dnes · +${completion?.xp || card.xp} XP` : `Splnit dnešní rituál · +${card.xp} XP`}
+      </button>
+      <p className="mt-3 text-xs text-white/75">Splnit lze jen jednou denně za každého partnera. Body se počítají do žebříčku výzev.</p>
     </Card>
   );
 }

@@ -118,3 +118,68 @@ with check (
     and cm.user_id = auth.uid()
   )
 );
+
+-- Partner dne completions: one completion per user per day, points counted in challenge leaderboard.
+create table if not exists public.partner_day_completions (
+  id uuid primary key default gen_random_uuid(),
+  couple_id uuid not null references public.couples(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  completion_date date not null,
+  card_key text,
+  xp integer not null default 10,
+  completed_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique(couple_id, user_id, completion_date)
+);
+
+alter table public.partner_day_completions enable row level security;
+
+drop policy if exists "couple members can read partner day completions" on public.partner_day_completions;
+drop policy if exists "users can insert own partner day completion" on public.partner_day_completions;
+drop policy if exists "users can update own partner day completion" on public.partner_day_completions;
+
+create policy "couple members can read partner day completions"
+on public.partner_day_completions
+for select
+to authenticated
+using (
+  exists (
+    select 1 from public.couple_members cm
+    where cm.couple_id = partner_day_completions.couple_id
+    and cm.user_id = auth.uid()
+  )
+);
+
+create policy "users can insert own partner day completion"
+on public.partner_day_completions
+for insert
+to authenticated
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.couple_members cm
+    where cm.couple_id = partner_day_completions.couple_id
+    and cm.user_id = auth.uid()
+  )
+);
+
+create policy "users can update own partner day completion"
+on public.partner_day_completions
+for update
+to authenticated
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.couple_members cm
+    where cm.couple_id = partner_day_completions.couple_id
+    and cm.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1 from public.couple_members cm
+    where cm.couple_id = partner_day_completions.couple_id
+    and cm.user_id = auth.uid()
+  )
+);
