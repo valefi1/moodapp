@@ -489,6 +489,22 @@ function getPushEndpoint(subscription) {
   return subscription?.endpoint || subscription?.toJSON?.().endpoint || '';
 }
 
+
+async function getFunctionErrorMessage(error) {
+  if (!error) return 'neznámá chyba';
+
+  try {
+    if (error.context && typeof error.context.json === 'function') {
+      const payload = await error.context.json();
+      return payload?.error || payload?.message || JSON.stringify(payload);
+    }
+  } catch (_) {
+    // Supabase FunctionsHttpError může mít body čitelné jen jednou.
+  }
+
+  return error.message || String(error);
+}
+
 function isMismatchedVapidError(error) {
   const message = `${error?.name || ''} ${error?.message || ''}`.toLowerCase();
   return message.includes('applicationserverkey')
@@ -1039,8 +1055,9 @@ export default function App() {
       });
 
       if (error) {
-        console.warn('Push notification failed:', error.message || error);
-        return { ok: false, error: error.message || String(error) };
+        const errorMessage = await getFunctionErrorMessage(error);
+        console.warn('Push notification failed:', errorMessage, error);
+        return { ok: false, error: errorMessage };
       }
 
       if (data?.error) {
