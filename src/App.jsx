@@ -13,6 +13,7 @@ import {
   Clock,
   Copy,
   Dice5,
+  ExternalLink,
   Flame,
   Gift,
   Heart,
@@ -22,6 +23,7 @@ import {
   MessageCircle,
   Moon,
   Plus,
+  Search,
   Send,
   ShieldCheck,
   Sparkles,
@@ -119,6 +121,53 @@ function getLocalDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function normalizeSearchText(value = '') {
+  return String(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+const LOVINO_KAMASUTRA_URLS = {
+  vodnar: 'https://www.lovino.cz/polohy/vodnar',
+  kyvadlo: 'https://www.lovino.cz/polohy/kyvadlo',
+  misionar: 'https://www.lovino.cz/polohy/misionarska-poloha',
+  'na-pejska': 'https://www.lovino.cz/polohy/na-pejska',
+  lzicka: 'https://www.lovino.cz/polohy/lzicka',
+  kovbojka: 'https://www.lovino.cz/polohy/kovbojka',
+  'obracena-kovbojka': 'https://www.lovino.cz/polohy/obracena-kovbojka',
+  'morska-panna': 'https://www.lovino.cz/polohy/morska-panna',
+  most: 'https://www.lovino.cz/polohy/most',
+  sefkuchar: 'https://www.lovino.cz/polohy/sefkuchar',
+  hacek: 'https://www.lovino.cz/polohy/hacek',
+  ohen: 'https://www.lovino.cz/polohy/ohen',
+  'pevne-objeti': 'https://www.lovino.cz/polohy/pevne-objeti',
+  tulipan: 'https://www.lovino.cz/polohy/tulipan',
+  krab: 'https://www.lovino.cz/polohy/krab',
+  klapka: 'https://www.lovino.cz/polohy/klapka',
+  houpacka: 'https://www.lovino.cz/polohy/houpacka',
+  'mexicky-styl': 'https://www.lovino.cz/polohy/mexicky-styl',
+  'vzdusny-jezdec': 'https://www.lovino.cz/polohy/vzdusny-jezdec',
+  'spanelsky-zapad-slunce': 'https://www.lovino.cz/polohy/spanelsky-zapad-slunce',
+  amazonka: 'https://www.lovino.cz/polohy/amazonka',
+};
+
+function getLovinoKamasutraSlug(position) {
+  return normalizeSearchText(position?.title || '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function createLovinoKamasutraUrl(position) {
+  const slug = getLovinoKamasutraSlug(position);
+  return LOVINO_KAMASUTRA_URLS[slug] || 'https://www.lovino.cz/kamasutra';
+}
+
+function hasVerifiedLovinoPositionUrl(position) {
+  return Boolean(LOVINO_KAMASUTRA_URLS[getLovinoKamasutraSlug(position)]);
 }
 
 function getPartnerDayCard() {
@@ -560,6 +609,7 @@ export default function App() {
   const [photoCategory, setPhotoCategory] = useState('all');
   const [challengeCategory, setChallengeCategory] = useState('all');
   const [kamaFilter, setKamaFilter] = useState('all');
+  const [kamaSearch, setKamaSearch] = useState('');
   const [oralOnly, setOralOnly] = useState(false);
   const [kamaDifficultyFilter, setKamaDifficultyFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('newest');
@@ -1615,7 +1665,7 @@ export default function App() {
             {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
-            {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
+            {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
         </div>
@@ -2014,19 +2064,19 @@ function WishlistHomeCard({ items, currentUserId, addWishlistItem, completeWishl
     <Card>
       <h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-pink-500" /> Wishlist přání</h3>
       <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Přidejte si přání, která může partner/ka splnit pro radost nebo smazání dluhu.</p>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Masáž, večeře, wellness..." />
-        <button onClick={submit} className="rounded-2xl bg-pink-500 px-4 py-2 font-black text-white">Přidat</button>
+        <button onClick={submit} className="shrink-0 rounded-2xl bg-pink-500 px-4 py-2 font-black text-white">Přidat</button>
       </div>
       <div className="mt-4 grid gap-2">
         {openItems.length === 0 && <div className="rounded-2xl bg-pink-50 p-4 text-sm font-bold text-gray-500 dark:bg-white/5 dark:text-gray-300">Zatím žádná otevřená přání.</div>}
         {openItems.map((item) => (
-          <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-pink-100 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5">
-            <div className="min-w-0">
-              <div className="truncate font-black">{item.title}</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">{item.user_id === currentUserId ? 'Moje přání' : 'Přání partnera/partnerky'}</div>
+          <div key={item.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-pink-100 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="whitespace-normal break-words font-black leading-snug">{item.title}</div>
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.user_id === currentUserId ? 'Moje přání' : 'Přání partnera/partnerky'}</div>
             </div>
-            <button onClick={() => completeWishlistItem?.(item)} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white">Splnit</button>
+            <button onClick={() => completeWishlistItem?.(item)} className="w-full shrink-0 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white sm:w-auto">Splnit</button>
           </div>
         ))}
       </div>
@@ -2566,18 +2616,108 @@ function ChallengeEditor({ addChallenge }) {
   );
 }
 
-function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto }) {
+function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, setKamaSearch, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto }) {
   const completed = kamaProgress.filter((item) => item.completed).length;
   const progress = Math.round((completed / Math.max(1, kamaPositions.length)) * 100);
   const typeFilters = ['all', 'Vaginální', 'Orální', 'Romantické'];
   const difficultyFilters = ['all', 'Začátečníci', 'Středně pokročilé', 'Pokročilé'];
+  const searchTerm = normalizeSearchText(kamaSearch);
   const filtered = kamaPositions
     .filter((position) => kamaFilter === 'all' || position.type === kamaFilter || position.tag === kamaFilter)
     .filter((position) => kamaDifficultyFilter === 'all' || position.difficulty === kamaDifficultyFilter)
-    .filter((position) => !oralOnly || position.type === 'Orální');
+    .filter((position) => !oralOnly || position.type === 'Orální')
+    .filter((position) => {
+      if (!searchTerm) return true;
+      const searchable = normalizeSearchText([
+        position.title,
+        position.type,
+        position.difficulty,
+        position.tag,
+        position.description?.setup,
+        position.description?.focus,
+        position.description?.comfort,
+      ].filter(Boolean).join(' '));
+      return searchable.includes(searchTerm);
+    });
   const progressById = Object.fromEntries(kamaProgress.map((item) => [item.position_id, item]));
 
-  return <div className="grid gap-5"><Card><div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Kamasutra 2.0</div><h2 className="mt-3 text-3xl font-black sm:text-4xl">Kamasutra Journey</h2><p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, menší mobilní karty, detailnější popisy a filtry podle typu i náročnosti.</p></div><div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-5 text-white shadow-2xl"><div className="text-xs font-bold text-white/80">Splněno</div><div className="text-5xl font-black">{completed}</div><div className="text-sm font-bold text-white/80">z {kamaPositions.length}</div><div className="mt-3 h-3 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div></div></div></Card><div className="flex flex-wrap items-center gap-2">{typeFilters.map((filter) => <PillButton key={filter} active={kamaFilter === filter} onClick={() => setKamaFilter(filter)}>{filter === 'all' ? 'Vše' : filter}</PillButton>)}{difficultyFilters.map((filter) => <PillButton key={filter} active={kamaDifficultyFilter === filter} onClick={() => setKamaDifficultyFilter(filter)}>{filter === 'all' ? 'Všechny úrovně' : filter}</PillButton>)}<button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button></div><section className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">{filtered.map((position) => { const item = progressById[position.id]; return <Card key={position.id} className="overflow-hidden p-0"><PoseGuide pose={position.pose} title={position.title} compact /><div className="p-2.5 sm:p-4"><h3 className="text-sm font-black leading-tight sm:text-xl">{position.title}</h3><div className="mt-2 flex flex-wrap gap-1"><span className="rounded-full bg-pink-100 px-2 py-1 text-[9px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-[10px]">{position.type}</span><span className="rounded-full bg-purple-100 px-2 py-1 text-[9px] font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 sm:text-[10px]">{position.difficulty}</span></div><div className="mt-3 space-y-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm"><InstructionBlock title="Nastavení" text={position.description.setup} /><InstructionBlock title="Pohyb a tempo" text={position.description.focus} /><InstructionBlock title="Komfort" text={position.description.comfort} /></div><button onClick={() => toggleKama(position.id)} className={`mt-3 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Splnit'}</button>{item?.completed && <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-2 py-2.5 text-center text-[10px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200 sm:text-[11px]"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku' : 'Přidat fotku'}</label>}{item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-3 h-28 w-full rounded-2xl object-cover shadow-xl sm:h-36" />}{item?.locked && <div className="mt-3 rounded-2xl bg-gray-900 p-3 text-center text-xs font-bold text-white"><Lock className="mx-auto mb-1" size={16} />Šifrovaná fotka</div>}</div></Card>; })}</section></div>;
+  return (
+    <div className="grid gap-5">
+      <Card>
+        <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Kamasutra 2.0</div>
+            <h2 className="mt-3 text-3xl font-black sm:text-4xl">Kamasutra Journey</h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, vyhledávání podle názvu nebo popisu, filtry a rychlý odkaz na detail polohy na Lovino.cz.</p>
+          </div>
+          <div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-5 text-white shadow-2xl">
+            <div className="text-xs font-bold text-white/80">Splněno</div>
+            <div className="text-5xl font-black">{completed}</div>
+            <div className="text-sm font-bold text-white/80">z {kamaPositions.length}</div>
+            <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-3 sm:p-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <label className="relative block min-w-0">
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              value={kamaSearch}
+              onChange={(event) => setKamaSearch(event.target.value)}
+              placeholder="Vyhledat polohu, typ nebo popis..."
+              className="w-full rounded-2xl border border-gray-200 bg-white py-3 pl-11 pr-4 text-sm font-bold text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white"
+            />
+          </label>
+          <div className="text-sm font-bold text-gray-500 dark:text-gray-300">
+            Zobrazeno {filtered.length} / {kamaPositions.length}
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {typeFilters.map((filter) => <PillButton key={filter} active={kamaFilter === filter} onClick={() => setKamaFilter(filter)}>{filter === 'all' ? 'Vše' : filter}</PillButton>)}
+          {difficultyFilters.map((filter) => <PillButton key={filter} active={kamaDifficultyFilter === filter} onClick={() => setKamaDifficultyFilter(filter)}>{filter === 'all' ? 'Všechny úrovně' : filter}</PillButton>)}
+          <button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button>
+        </div>
+      </Card>
+
+      {filtered.length === 0 ? (
+        <EmptyState title="Žádná poloha nenalezena" text="Zkuste kratší výraz, jiný typ nebo vypnout některý filtr." icon={Search} />
+      ) : (
+        <section className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
+          {filtered.map((position) => {
+            const item = progressById[position.id];
+            const lovinoUrl = createLovinoKamasutraUrl(position);
+            const hasLovinoPositionUrl = hasVerifiedLovinoPositionUrl(position);
+            return (
+              <Card key={position.id} className="overflow-hidden p-0">
+                <PoseGuide pose={position.pose} title={position.title} compact />
+                <div className="p-2.5 sm:p-4">
+                  <h3 className="text-sm font-black leading-tight sm:text-xl">{position.title}</h3>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <span className="rounded-full bg-pink-100 px-2 py-1 text-[9px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-[10px]">{position.type}</span>
+                    <span className="rounded-full bg-purple-100 px-2 py-1 text-[9px] font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 sm:text-[10px]">{position.difficulty}</span>
+                  </div>
+                  <div className="mt-3 space-y-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm">
+                    <InstructionBlock title="Nastavení" text={position.description.setup} />
+                    <InstructionBlock title="Pohyb a tempo" text={position.description.focus} />
+                    <InstructionBlock title="Komfort" text={position.description.comfort} />
+                  </div>
+                  <a href={lovinoUrl} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-pink-50 px-2 py-2 text-center text-[10px] font-black text-pink-700 transition hover:bg-pink-100 dark:border-pink-500/30 dark:bg-pink-500/10 dark:text-pink-200 sm:text-xs">
+                    <ExternalLink size={14} /> {hasLovinoPositionUrl ? 'Zobrazit polohu na Lovino.cz' : 'Otevřít Kamasutru na Lovino.cz'}
+                  </a>
+                  <button onClick={() => toggleKama(position.id)} className={`mt-2 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Splnit'}</button>
+                  {item?.completed && <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-2 py-2.5 text-center text-[10px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200 sm:text-[11px]"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku' : 'Přidat fotku'}</label>}
+                  {item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-3 h-28 w-full rounded-2xl object-cover shadow-xl sm:h-36" />}
+                  {item?.locked && <div className="mt-3 rounded-2xl bg-gray-900 p-3 text-center text-xs font-bold text-white"><Lock className="mx-auto mb-1" size={16} />Šifrovaná fotka</div>}
+                </div>
+              </Card>
+            );
+          })}
+        </section>
+      )}
+    </div>
+  );
 }
 
 
