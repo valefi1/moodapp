@@ -469,11 +469,32 @@ function isStandalonePwa() {
 
 async function getServiceWorkerRegistration() {
   if (!('serviceWorker' in navigator)) return null;
+
   const existing = await navigator.serviceWorker.getRegistration('/');
-  if (existing) return existing;
-  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-  await navigator.serviceWorker.ready;
-  return registration;
+  const registration = existing || await navigator.serviceWorker.register('/sw.js', {
+    scope: '/',
+    updateViaCache: 'none',
+  });
+
+  try {
+    await registration.update();
+  } catch {
+    // Aktualizace SW není kritická pro zapnutí notifikací.
+  }
+
+  return await navigator.serviceWorker.ready;
+}
+
+function getPushEndpoint(subscription) {
+  return subscription?.endpoint || subscription?.toJSON?.().endpoint || '';
+}
+
+function isMismatchedVapidError(error) {
+  const message = `${error?.name || ''} ${error?.message || ''}`.toLowerCase();
+  return message.includes('applicationserverkey')
+    || message.includes('different application server key')
+    || message.includes('registration failed')
+    || message.includes('invalidstateerror');
 }
 
 function getPushSupportMessage() {
@@ -960,32 +981,53 @@ export default function App() {
         });
       }
 
+      try {
+        // Pokud byl na serveru změněný VAPID klíč, stará registrace může být neplatná.
+        // Krátký resubscribe test ji odhalí a vytvoří čistou subscription.
+        if (!getPushEndpoint(subscription)) throw new Error('Push subscription nemá endpoint.');
+      } catch (error) {
+        if (isMismatchedVapidError(error) && subscription) await subscription.unsubscribe();
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+
+      const endpoint = getPushEndpoint(subscription);
+      if (!endpoint) throw new Error('Prohlížeč nevytvořil push endpoint.');
+
       const { error } = await supabase.from('push_subscriptions').upsert(
         {
           couple_id: couple.id,
           user_id: session.user.id,
+          endpoint,
           subscription: subscription.toJSON(),
           user_agent: navigator.userAgent,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'user_id' }
+        { onConflict: 'endpoint' }
       );
 
       if (error) throw error;
 
       setNotificationsEnabled(true);
-      setToast('Mobilní upozornění jsou zapnutá na tomto zařízení.');
+      setToast('Mobilní upozornění jsou zapnutá na tomto zařízení. Pro iPhone musí být aplikace spuštěná z ikony na ploše.');
     } catch (error) {
       setNotificationsEnabled(false);
-      setToast(`Upozornění se nepodařilo zapnout: ${error.message}`);
+
+      if (isMismatchedVapidError(error)) {
+        setToast('Upozornění se nepodařilo zapnout kvůli staré registraci. Zavři aplikaci, otevři ji znovu z ikony na ploše a klepni znovu na Notif.');
+      } else {
+        setToast(`Upozornění se nepodařilo zapnout: ${error.message}`);
+      }
     }
   }
 
   async function notifyPartner(eventType, title, body) {
-    if (!couple?.id || !session?.user?.id || !supabase) return;
+    if (!couple?.id || !session?.user?.id || !supabase) return { ok: false, error: 'Chybí pár, uživatel nebo Supabase.' };
 
     try {
-      const { error } = await supabase.functions.invoke('send-push-notification', {
+      const { data, error } = await supabase.functions.invoke('send-push-notification', {
         body: {
           coupleId: couple.id,
           senderId: session.user.id,
@@ -998,9 +1040,18 @@ export default function App() {
 
       if (error) {
         console.warn('Push notification failed:', error.message || error);
+        return { ok: false, error: error.message || String(error) };
       }
+
+      if (data?.error) {
+        console.warn('Push notification failed:', data.error);
+        return { ok: false, error: data.error, data };
+      }
+
+      return { ok: true, data };
     } catch (error) {
       console.warn('Push notification failed:', error);
+      return { ok: false, error: error.message || String(error) };
     }
   }
 
@@ -1481,8 +1532,34 @@ export default function App() {
   }
 
   async function testPushNotification() {
-    await notifyPartner('push_test', 'MoodSync test', `${profile?.display_name || 'Partner/ka'} testuje push notifikace.`);
-    setToast('Testovací push notifikace byla odeslána partnerovi/partnerce. Pokud nedorazí, zkontroluj push_subscriptions a Edge Function logs.');
+    try {
+      const registration = await getServiceWorkerRegistration();
+      if (Notification.permission === 'granted' && registration) {
+        await registration.showNotification('MoodSync test na tomto zařízení', {
+          body: 'Lokální test funguje. Teď zkouším push partnerovi/partnerce.',
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+          tag: 'local-push-test',
+          data: { url: window.location.origin },
+        });
+      }
+
+      const result = await notifyPartner('push_test', 'MoodSync test', `${profile?.display_name || 'Partner/ka'} testuje push notifikace.`);
+      const sentTo = result?.data?.sentTo ?? 0;
+      const delivered = result?.data?.delivered ?? 0;
+
+      if (!result?.ok) {
+        return setToast(`Lokální test proběhl, ale odeslání partnerovi selhalo: ${result?.error || 'neznámá chyba'}`);
+      }
+
+      if (!sentTo) {
+        return setToast('Lokální test proběhl. Partner/ka ale ještě nemá na žádném zařízení zapnuté notifikace.');
+      }
+
+      setToast(`Lokální test proběhl. Push partnerovi/partnerce: ${delivered}/${sentTo} zařízení přijalo požadavek.`);
+    } catch (error) {
+      setToast(`Test notifikace selhal: ${error.message}`);
+    }
   }
 
   function saveEncryptionPassphrase(value) {

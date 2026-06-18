@@ -69,7 +69,7 @@ serve(async (req) => {
 
     const { data: subscriptions, error } = await supabase
       .from("push_subscriptions")
-      .select("id,user_id,subscription")
+      .select("id,user_id,endpoint,subscription")
       .eq("couple_id", coupleId)
       .neq("user_id", senderId);
 
@@ -82,13 +82,17 @@ serve(async (req) => {
       tag: eventType,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
+      timestamp: Date.now(),
     });
 
     const results = await Promise.allSettled(
       (subscriptions || []).map(async (item) => {
         try {
-          await webpush.sendNotification(item.subscription, payload);
-          return { id: item.id, ok: true };
+          await webpush.sendNotification(item.subscription, payload, {
+            TTL: 60 * 60 * 24,
+            urgency: "normal",
+          });
+          return { id: item.id, endpoint: item.endpoint, ok: true };
         } catch (err) {
           const statusCode = err?.statusCode || err?.status;
           if (statusCode === 404 || statusCode === 410) {
@@ -97,19 +101,28 @@ serve(async (req) => {
 
           console.error("Push failed", {
             subscriptionId: item.id,
+            endpoint: item.endpoint,
             statusCode,
             message: err?.message || String(err),
           });
 
-          return { id: item.id, ok: false, statusCode, message: err?.message || String(err) };
+          return { id: item.id, endpoint: item.endpoint, ok: false, statusCode, message: err?.message || String(err) };
         }
       }),
     );
 
+    const settled = results.map((result) => result.status === "fulfilled" ? result.value : {
+      ok: false,
+      message: result.reason?.message || String(result.reason),
+    });
+    const delivered = settled.filter((result) => result.ok).length;
+
     return jsonResponse({
       success: true,
       sentTo: subscriptions?.length || 0,
-      results,
+      delivered,
+      failed: settled.length - delivered,
+      results: settled,
     });
   } catch (err) {
     console.error("send-push-notification error", err);
