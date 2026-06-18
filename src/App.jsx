@@ -95,11 +95,10 @@ const rewardTiers = [
 ];
 
 const partnerDayCards = [
-  { compliment: 'Řekni partnerovi jednu věc, které si na něm dnes opravdu vážíš.', question: 'Co by ti dnes udělalo největší radost?', challenge: 'Dejte si večer 15 minut bez mobilu jen pro sebe.', xp: 10 },
-  { compliment: 'Pošli partnerovi zprávu s jedním detailem, který tě na něm přitahuje.', question: 'Kdy ses se mnou naposledy cítil/a nejvíc blízko?', challenge: 'Naplánujte si malý společný rituál na dnešní večer.', xp: 12 },
-  { compliment: 'Připomeň partnerovi jeden moment, kdy tě opravdu rozesmál.', question: 'Co bych pro tebe mohl/a tento týden udělat?', challenge: 'Vyberte jednu fotku do galerie jako dnešní vzpomínku.', xp: 8 },
-  { compliment: 'Řekni partnerovi, co na něm obdivuješ mimo vzhled.', question: 'Co bys chtěl/a v našem vztahu častěji?', challenge: 'Splňte jednu lehkou romantickou výzvu.', xp: 10 },
-  { compliment: 'Pošli partnerovi krátké „myslím na tebe“ v průběhu dne.', question: 'Jakou náladu bys chtěl/a dnes večer vytvořit?', challenge: 'Vyberte jednu věc z wishlistu a naplánujte ji.', xp: 14 },
+  {
+    task: 'Udělej dnes pro partnera jeden malý, konkrétní skutek lásky: pomoc, zpráva, objetí, kompliment nebo 10 minut plné pozornosti.',
+    xp: 10,
+  },
 ];
 
 const surpriseIdeas = [
@@ -157,126 +156,16 @@ function buildRelationshipHistory(posts, ownCloseness, partnerCloseness, ownHeat
 }
 
 const starterChallenges = [
-  {
-    title: 'Pošli partnerovi tři věci, které na něm dnes miluješ.',
-    category: 'romantic',
-    difficulty: 'Easy',
-    xp: 20,
-  },
-  {
-    title: 'Pošli tajemnou selfie jen pro partnera nebo partnerku.',
-    category: 'flirty',
-    difficulty: 'Easy',
-    xp: 8,
-  },
-  {
-    title: 'Mirror tease v bezpečném soukromém prostředí.',
-    category: 'spicy',
-    difficulty: 'Medium',
-    xp: 15,
-  },
-  {
-    title: 'Dejte si večer otázku: Co ti dnes udělalo radost?',
-    category: 'deep',
-    difficulty: 'Easy',
-    xp: 12,
-  },
-  {
-    title: 'Naplánujte spontánní mini rande ještě dnes.',
-    category: 'romantic',
-    difficulty: 'Medium',
-    xp: 18,
-  },
-  {
-    title: 'Pošli partnerovi hlasovou zprávu s něčím sexy.',
-    category: 'flirty',
-    difficulty: 'Medium',
-    xp: 16,
-  },
-  {
-    title: '30 minut bez mobilu jen jeden pro druhého.',
-    category: 'deep',
-    difficulty: 'Easy',
-    xp: 20,
-  },
-  {
-    title: 'Vyzkoušejte novou polohu z Kamasutry.',
-    category: 'spicy',
-    difficulty: 'Hard',
-    xp: 35,
-  },
-  {
-    title: 'Řekněte si navzájem jednu tajnou fantazii.',
-    category: 'deep',
-    difficulty: 'Hard',
-    xp: 30,
-  },
-  {
-    title: 'Připrav partnerovi překvapení bez vysvětlení.',
-    category: 'fun',
-    difficulty: 'Medium',
-    xp: 18,
-  },
-  {
-    title: 'Polibek minimálně na jednu minutu bez přerušení.',
-    category: 'romantic',
-    difficulty: 'Easy',
-    xp: 14,
-  },
-  {
-    title: 'Večer jen ve spodním prádle nebo pyžamu partnera.',
-    category: 'spicy',
-    difficulty: 'Medium',
-    xp: 24,
-  },
-  {
-    title: 'Pošli partnerovi fotku detailu těla bez obličeje.',
-    category: 'flirty',
-    difficulty: 'Medium',
-    xp: 14,
-  },
-  {
-    title: 'Udělejte si společnou koupel nebo sprchu.',
-    category: 'romantic',
-    difficulty: 'Medium',
-    xp: 22,
-  },
-  {
-    title: 'Řekni partnerovi, co tě na něm nejvíc přitahuje.',
-    category: 'deep',
-    difficulty: 'Easy',
-    xp: 12,
-  },
-  {
-    title: 'Napiš partnerovi krátký dirty text během dne.',
-    category: 'flirty',
-    difficulty: 'Easy',
-    xp: 10,
-  },
-  {
-    title: 'Společný filmový večer bez dalších povinností.',
-    category: 'fun',
-    difficulty: 'Easy',
-    xp: 10,
-  },
-  {
-    title: 'Masáž zad alespoň 15 minut.',
-    category: 'romantic',
-    difficulty: 'Easy',
-    xp: 16,
-  },
-  {
-    title: 'Vyberte si společně další challenge do zítřka.',
-    category: 'fun',
-    difficulty: 'Easy',
-    xp: 8,
-  },
-  {
-    title: 'Večer bez světla jen při svíčkách.',
-    category: 'spicy',
-    difficulty: 'Medium',
-    xp: 20,
-  },
+  { title: 'Pošli partnerovi tři konkrétní věci, kterých si na něm dnes vážíš.', category: 'romantic', difficulty: 'Easy', xp: 12 },
+  { title: 'Připrav partnerovi malou pozornost bez očekávání odměny.', category: 'romantic', difficulty: 'Easy', xp: 14 },
+  { title: 'Dejte si 15 minut bez mobilu jen na sebe.', category: 'deep', difficulty: 'Easy', xp: 15 },
+  { title: 'Zeptej se partnera, co by mu dnes udělalo radost, a jednu věc opravdu udělej.', category: 'deep', difficulty: 'Medium', xp: 18 },
+  { title: 'Naplánuj mini rande nebo společný rituál na tento týden.', category: 'fun', difficulty: 'Medium', xp: 16 },
+  { title: 'Pošli partnerovi hravou zprávu, která mu zlepší den.', category: 'flirty', difficulty: 'Easy', xp: 10 },
+  { title: 'Dopřej partnerovi masáž, objetí nebo jiný příjemný dotek podle jeho nálady.', category: 'romantic', difficulty: 'Medium', xp: 18 },
+  { title: 'Řekněte si navzájem jednu věc, kterou chcete ve vztahu zažívat častěji.', category: 'deep', difficulty: 'Medium', xp: 20 },
+  { title: 'Vyber společnou aktivitu z wishlistu a domluv konkrétní termín.', category: 'fun', difficulty: 'Easy', xp: 12 },
+  { title: 'Vymysli partnerovi bezpečnou flirtovací výzvu na večer.', category: 'flirty', difficulty: 'Medium', xp: 16 },
 ];
 
 function normalizeStarterChallenge(challenge, coupleId, index = 0, userId = null) {
@@ -286,7 +175,7 @@ function normalizeStarterChallenge(challenge, coupleId, index = 0, userId = null
     category: challenge.category,
     difficulty: challenge.difficulty,
     xp: challenge.xp,
-    assigned_to: index % 2 === 0 ? userId : null,
+    assigned_to: null,
     accepted: false,
     completed: false,
   };
@@ -1334,25 +1223,27 @@ export default function App() {
       category: payload.category,
       difficulty: payload.difficulty,
       xp: Number(payload.xp) || 10,
-      assigned_to: payload.assignedTo === 'me' ? session.user.id : null,
+      assigned_to: null,
+      challenged_by: session.user.id,
+      challenge_status: 'open',
       accepted: false,
       completed: false,
     });
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
-    await addSystemPost('challenge', `Nová výzva: ${payload.title.trim()} · +${Number(payload.xp) || 10} XP`);
-    await notifyPartner('challenge_added', 'MoodSync', 'Partner/ka přidal/a novou výzvu.');
+    await addSystemPost('challenge', `Nová výzva k udělení partnerovi: ${payload.title.trim()} · +${Number(payload.xp) || 10} XP`);
+    await notifyPartner('challenge_added', 'MoodSync', 'Partner/ka přidal/a novou výzvu. Body se udělují až po potvrzení partnerem.');
   }
 
   async function updateChallenge(id, patch) {
-    const normalizedPatch = patch.completed ? { ...patch, completed_by: session.user.id } : patch;
+    const normalizedPatch = patch.completed ? { ...patch, completed_by: patch.completed_by || session.user.id, completed_confirmed_by: session.user.id } : patch;
     const { error } = await supabase.from('challenges').update(normalizedPatch).eq('id', id);
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
     if (patch.completed) {
       const completedChallenge = challenges.find((item) => item.id === id);
-      await addSystemPost('challenge', `Výzva splněna: ${completedChallenge?.title || 'výzva'} · +${completedChallenge?.xp || 10} XP`);
-      await notifyPartner('challenge_completed', 'MoodSync', 'Partner/ka splnil/a výzvu a získal/a XP.');
+      await addSystemPost('challenge', `Body uděleny za výzvu: ${completedChallenge?.title || 'výzva'} · +${completedChallenge?.xp || 10} XP`);
+      await notifyPartner('challenge_completed', 'MoodSync', `Partner/ka ti udělil/a +${completedChallenge?.xp || 10} XP za splněnou výzvu.`);
     }
   }
 
@@ -1529,23 +1420,28 @@ export default function App() {
 
   async function completePartnerDay(card) {
     if (!couple?.id || !session?.user?.id || !card) return;
+    const partnerId = getPartnerUserId();
+    if (!partnerId) return setToast('Partner/ka zatím není v páru aktivní. Body půjde udělit, až se přihlásí nebo provede první akci.');
+
     const completionDate = getLocalDateKey();
     const { error } = await supabase.from('partner_day_completions').upsert(
       {
         couple_id: couple.id,
-        user_id: session.user.id,
+        user_id: partnerId,
+        awarded_by: session.user.id,
         completion_date: completionDate,
-        card_key: `${completionDate}-${card.challenge}`,
+        card_key: `${completionDate}-${card.task}`,
         xp: Number(card.xp) || 10,
         completed_at: new Date().toISOString(),
+        approved_at: new Date().toISOString(),
       },
       { onConflict: 'couple_id,user_id,completion_date' }
     );
-    if (error) return setToast(`Partner dne se nepodařilo splnit: ${error.message}`);
+    if (error) return setToast(`Body pro partnera se nepodařilo udělit: ${error.message}`);
     await loadPartnerDayCompletions(couple.id);
-    await addSystemPost('partner_day', `Partner dne splněn: ${card.challenge} · +${card.xp || 10} XP`);
-    await notifyPartner('partner_day_completed', 'MoodSync Partner dne', `Partner/ka splnil/a dnešní rituál a získal/a +${card.xp || 10} XP.`);
-    setToast(`Partner dne splněn. Získáváš +${card.xp || 10} XP.`);
+    await addSystemPost('partner_day', `Partner dne: uděleno +${card.xp || 10} XP partnerovi za dnešní úkol.`);
+    await notifyPartner('partner_day_completed', 'MoodSync Partner dne', `Partner/ka ti udělil/a +${card.xp || 10} XP za dnešní úkol.`);
+    setToast(`Partnerovi/partnerce bylo uděleno +${card.xp || 10} XP.`);
   }
 
   async function testPushNotification() {
@@ -1981,6 +1877,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
   const partnerDay = getPartnerDayCard();
   const todayKey = getLocalDateKey();
   const partnerDayCompletion = partnerDayCompletions.find((item) => item.user_id === currentUserId && item.completion_date === todayKey) || null;
+  const partnerDayAwardedByMe = partnerDayCompletions.find((item) => item.awarded_by === currentUserId && item.completion_date === todayKey) || null;
 
   return (
     <>
@@ -2010,7 +1907,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
 
       <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <RelationshipScoreCard score={relationshipScore.score} trend={relationshipScore.trend} history={relationshipHistory} />
-        <PartnerDayCard card={partnerDay} completion={partnerDayCompletion} completePartnerDay={completePartnerDay} />
+        <PartnerDayCard card={partnerDay} awardedByMe={partnerDayAwardedByMe} myAward={partnerDayCompletion} completePartnerDay={completePartnerDay} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
@@ -2071,8 +1968,8 @@ function RelationshipScoreCard({ score, trend, history }) {
   );
 }
 
-function PartnerDayCard({ card, completion, completePartnerDay }) {
-  const completed = Boolean(completion);
+function PartnerDayCard({ card, awardedByMe, myAward, completePartnerDay }) {
+  const awarded = Boolean(awardedByMe);
   return (
     <Card className="bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 text-white">
       <div className="flex items-start justify-between gap-3">
@@ -2080,24 +1977,27 @@ function PartnerDayCard({ card, completion, completePartnerDay }) {
           <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black backdrop-blur">
             <Sparkles size={15} /> Partner dne
           </div>
-          <h3 className="mt-4 text-2xl font-black">Dnešní malý rituál</h3>
+          <h3 className="mt-4 text-2xl font-black">Jeden denní úkol</h3>
         </div>
         <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-pink-600">+{card.xp} XP</div>
       </div>
-      <div className="mt-4 grid gap-3 text-sm">
-        <div className="rounded-2xl bg-white/15 p-3"><b>Kompliment:</b> {card.compliment}</div>
-        <div className="rounded-2xl bg-white/15 p-3"><b>Otázka:</b> {card.question}</div>
-        <div className="rounded-2xl bg-white/15 p-3"><b>Mini výzva:</b> {card.challenge}</div>
+      <div className="mt-4 rounded-2xl bg-white/15 p-4 text-sm leading-relaxed">
+        <b>Dnešní úkol:</b> {card.task}
       </div>
+      {myAward && (
+        <div className="mt-3 rounded-2xl bg-emerald-400/20 p-3 text-sm font-bold text-white">
+          Partner/ka ti dnes udělil/a +{myAward.xp || card.xp} XP.
+        </div>
+      )}
       <button
         type="button"
-        disabled={completed}
+        disabled={awarded}
         onClick={() => completePartnerDay?.(card)}
-        className={`mt-4 w-full rounded-2xl px-5 py-3 text-sm font-black transition ${completed ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-pink-600 hover:bg-pink-50'}`}
+        className={`mt-4 w-full rounded-2xl px-5 py-3 text-sm font-black transition ${awarded ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-pink-600 hover:bg-pink-50'}`}
       >
-        {completed ? `✓ Splněno dnes · +${completion?.xp || card.xp} XP` : `Splnit dnešní rituál · +${card.xp} XP`}
+        {awarded ? `✓ Partnerovi uděleno +${awardedByMe?.xp || card.xp} XP` : `Udělit partnerovi +${card.xp} XP`}
       </button>
-      <p className="mt-3 text-xs text-white/75">Splnit lze jen jednou denně za každého partnera. Body se počítají do žebříčku výzev.</p>
+      <p className="mt-3 text-xs text-white/75">Body si člověk nepřidává sám. Každý den můžeš dát body partnerovi/partnerce, když úkol opravdu proběhl.</p>
     </Card>
   );
 }
@@ -2234,13 +2134,9 @@ function ActiveChallengeHomeCard({ challenge, outgoingCount, updateChallenge, op
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[320px]">
           {challenge && (
-            <button
-              type="button"
-              onClick={() => updateChallenge?.(challenge.id, { completed: true, accepted: true, completed_at: new Date().toISOString(), challenge_status: 'completed' })}
-              className="rounded-2xl bg-emerald-500 px-5 py-3 font-black text-white shadow-lg shadow-emerald-500/20"
-            >
-              Splnit výzvu
-            </button>
+            <div className="rounded-2xl bg-white p-4 text-sm font-bold text-gray-700 dark:bg-white/10 dark:text-gray-200">
+              Až výzvu splníš, partner/ka ti body udělí ze svého účtu. Body si nepřidáváš sám/sama.
+            </div>
           )}
           <button
             type="button"
@@ -2584,7 +2480,9 @@ function ChallengesPanel({ challenges = [], allChallenges = [], category, setCat
 function ChallengeCard({ challenge, updateChallenge, challengePartner, currentUserId }) {
   const [hours, setHours] = useState(24);
   const isAssignedToMe = challenge.assigned_to === currentUserId;
+  const canAwardPartner = challenge.challenge_status === 'active' && challenge.challenged_by === currentUserId && challenge.assigned_to && !challenge.completed;
   const isActive = challenge.challenge_status === 'active';
+  const isOpen = !challenge.completed && !isActive && !['failed', 'debt_assigned', 'debt_repaid', 'completed'].includes(challenge.challenge_status);
 
   return (
     <article className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5">
@@ -2595,15 +2493,34 @@ function ChallengeCard({ challenge, updateChallenge, challengePartner, currentUs
             <span className="rounded-full bg-pink-500 px-3 py-1 font-bold text-white">{challenge.category}</span>
             <span className="rounded-full bg-purple-500 px-3 py-1 font-bold text-white">+{challenge.xp || 10} XP</span>
             {isActive && <span className="rounded-full bg-amber-400 px-3 py-1 font-bold text-gray-900">Limit {formatDate(challenge.challenge_deadline)}</span>}
-            {challenge.completed_by && <span className="rounded-full bg-emerald-500 px-3 py-1 font-bold text-white">Bod získán</span>}
+            {isAssignedToMe && isActive && <span className="rounded-full bg-white px-3 py-1 font-bold text-pink-700 dark:bg-white/10 dark:text-pink-200">Plním já</span>}
+            {challenge.completed_by && <span className="rounded-full bg-emerald-500 px-3 py-1 font-bold text-white">Body uděleny</span>}
           </div>
         </div>
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <button onClick={() => updateChallenge(challenge.id, { accepted: !challenge.accepted })} disabled={challenge.completed} className="rounded-2xl bg-gray-900 px-4 py-2 text-sm font-black text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">{challenge.accepted ? 'Odebrat' : 'Přijmout'}</button>
-        <button onClick={() => updateChallenge(challenge.id, { completed: true, accepted: true, completed_at: new Date().toISOString(), challenge_status: 'completed' })} disabled={challenge.completed || (isActive && !isAssignedToMe)} className="rounded-2xl bg-pink-500 px-4 py-2 text-sm font-black text-white disabled:opacity-40">{challenge.completed ? 'Hotovo' : isActive && !isAssignedToMe ? 'Čeká na partnera' : 'Splnit za sebe'}</button>
-      </div>
-      {!challenge.completed && !isActive && (
+
+      {challenge.completed ? (
+        <div className="mt-4 rounded-2xl bg-emerald-50 p-3 text-sm font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
+          Výzva je uzavřená. XP získal/a ten, komu je partner udělil.
+        </div>
+      ) : isAssignedToMe && isActive ? (
+        <div className="mt-4 rounded-2xl bg-white p-3 text-sm font-bold text-gray-600 dark:bg-white/10 dark:text-gray-300">
+          Tuhle výzvu máš splnit ty. Až ji splníš, partner/ka ti body potvrdí a přidá.
+        </div>
+      ) : canAwardPartner ? (
+        <button
+          onClick={() => updateChallenge(challenge.id, { completed: true, accepted: true, completed_by: challenge.assigned_to, completed_at: new Date().toISOString(), challenge_status: 'completed' })}
+          className="mt-4 w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-emerald-500/20"
+        >
+          Udělit partnerovi +{challenge.xp || 10} XP
+        </button>
+      ) : isActive ? (
+        <div className="mt-4 rounded-2xl bg-white p-3 text-sm font-bold text-gray-600 dark:bg-white/10 dark:text-gray-300">
+          Čeká se na potvrzení od partnera/partnerky. Body nelze přidat sám/sama sobě.
+        </div>
+      ) : null}
+
+      {isOpen && (
         <div className="mt-4 rounded-2xl bg-white p-3 dark:bg-white/10">
           <div className="mb-2 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-300">Vyzvat partnera</div>
           <div className="flex gap-2">
@@ -2624,12 +2541,29 @@ function ChallengeCard({ challenge, updateChallenge, challengePartner, currentUs
 
 function ChallengeEditor({ addChallenge }) {
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('spicy');
-  const [difficulty, setDifficulty] = useState('Medium');
+  const [category, setCategory] = useState('romantic');
+  const [difficulty, setDifficulty] = useState('Easy');
   const [xp, setXp] = useState(10);
-  const [assignedTo, setAssignedTo] = useState('open');
-  function submit() { addChallenge({ title, category, difficulty, xp, assignedTo }); setTitle(''); }
-  return <Card><h3 className="mb-4 text-xl font-black">Vytvořit vlastní výzvu</h3><div className="grid gap-3 md:grid-cols-[1fr_150px_150px_130px_110px_auto]"><TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Napiš vlastní výzvu..." /><select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{challengeCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option>Easy</option><option>Medium</option><option>Hard</option><option>Extreme</option></select><select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="open">Kdo dřív</option><option value="me">Pro mě</option></select><TextInput type="number" min="1" max="100" value={xp} onChange={(event) => setXp(Number(event.target.value))} /><button onClick={submit} className="rounded-2xl bg-purple-500 px-5 py-3 font-black text-white hover:bg-purple-600">Přidat</button></div></Card>;
+  function submit() {
+    if (!title.trim()) return;
+    addChallenge({ title, category, difficulty, xp });
+    setTitle('');
+  }
+  return (
+    <Card>
+      <h3 className="mb-2 text-xl font-black">Vytvořit vlastní výzvu</h3>
+      <p className="mb-4 text-sm text-gray-500 dark:text-gray-300">Výzva se sama neboduje. Nejdřív vyzveš partnera a XP mu přidáš až po skutečném splnění.</p>
+      <div className="grid gap-3 md:grid-cols-[1fr_150px_150px_110px_auto]">
+        <TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Napiš vlastní výzvu..." />
+        <select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">
+          {challengeCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+        <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option>Easy</option><option>Medium</option><option>Hard</option></select>
+        <TextInput type="number" min="1" max="100" value={xp} onChange={(event) => setXp(Number(event.target.value))} />
+        <button onClick={submit} className="rounded-2xl bg-purple-500 px-5 py-3 font-black text-white hover:bg-purple-600">Přidat</button>
+      </div>
+    </Card>
+  );
 }
 
 function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto }) {
