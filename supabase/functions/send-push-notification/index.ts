@@ -89,8 +89,8 @@ serve(async (req) => {
       (subscriptions || []).map(async (item) => {
         try {
           await webpush.sendNotification(item.subscription, payload, {
-            TTL: 60 * 60 * 24,
-            urgency: "normal",
+            TTL: eventType === "message_added" ? 60 * 60 : 60 * 60 * 24,
+            urgency: eventType === "message_added" ? "high" : "normal",
           });
           return { id: item.id, endpoint: item.endpoint, ok: true };
         } catch (err) {

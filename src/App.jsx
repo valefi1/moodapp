@@ -285,12 +285,29 @@ const kamaPositions = [
 
 const navItems = [
   { id: 'home', label: 'Home', icon: Heart },
+  { id: 'chat', label: 'Chat', icon: Send },
   { id: 'feed', label: 'Feed', icon: MessageCircle },
   { id: 'gallery', label: 'Gallery', icon: Image },
   { id: 'challenges', label: 'Challenges', icon: Flame },
   { id: 'kamasutra', label: 'Kamasutra', icon: Heart },
   { id: 'profile', label: 'Profile', icon: User },
 ];
+
+function getInitialActiveTab(fallback = 'home') {
+  if (typeof window === 'undefined') return fallback;
+  const tabFromUrl = new URLSearchParams(window.location.search).get('tab');
+  return navItems.some((item) => item.id === tabFromUrl) ? tabFromUrl : fallback;
+}
+
+function getNotificationTargetUrl(eventType) {
+  if (typeof window === 'undefined') return '/';
+  const tab = eventType === 'message_added'
+    ? 'chat'
+    : String(eventType || '').includes('challenge')
+      ? 'challenges'
+      : 'home';
+  return `${window.location.origin}?tab=${tab}`;
+}
 
 function createPairCode() {
   return `LOVE-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
@@ -586,7 +603,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dark, setDark] = useState(local.dark ?? true);
-  const [activeTab, setActiveTab] = useState(local.activeTab || 'home');
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab(local.activeTab || 'home'));
   const [profile, setProfile] = useState(null);
   const [couple, setCouple] = useState(null);
   const [coupleAvatarUrl, setCoupleAvatarUrl] = useState(null);
@@ -631,6 +648,14 @@ export default function App() {
     document.documentElement.classList.toggle('dark', Boolean(dark));
     document.body.classList.toggle('dark', Boolean(dark));
   }, [dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode]);
+
+  useEffect(() => {
+    const tabFromUrl = new URLSearchParams(window.location.search).get('tab');
+    if (tabFromUrl && navItems.some((item) => item.id === tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     getServiceWorkerRegistration().catch(() => {
@@ -989,7 +1014,7 @@ export default function App() {
           eventType,
           title,
           body,
-          url: window.location.origin,
+          url: getNotificationTargetUrl(eventType),
         },
       });
 
@@ -1209,9 +1234,10 @@ export default function App() {
     await notifyPartner('thought_added', 'MoodSync', 'Partner/ka ti poslal/a novou myšlenku.');
   }
 
-  async function sendMessage() {
-    if (!couple?.id || !message.trim()) return;
-    const { error } = await supabase.from('posts').insert({ couple_id: couple.id, author_id: session.user.id, type: 'chat', text: message.trim() });
+  async function sendMessage(nextText) {
+    const cleanText = typeof nextText === 'string' ? nextText.trim() : message.trim();
+    if (!couple?.id || !cleanText) return;
+    const { error } = await supabase.from('posts').insert({ couple_id: couple.id, author_id: session.user.id, type: 'chat', text: cleanText });
     if (error) return setToast(error.message);
     setMessage('');
     await loadPosts(couple.id);
@@ -1560,6 +1586,7 @@ export default function App() {
   }, [posts, photoCategory, sortOrder]);
 
   const photoPosts = filteredPosts.filter((post) => post.type === 'photo');
+  const chatPosts = posts.filter((post) => post.type === 'chat');
   const filteredChallenges = challenges.filter((challenge) => challengeCategory === 'all' || challenge.category === challengeCategory);
   const challengeStats = getChallengeStats(challenges, session?.user?.id, partnerDayCompletions);
 
@@ -1662,6 +1689,7 @@ export default function App() {
           )}
 
           <AppErrorBoundary resetKey={activeTab}>
+            {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} />}
             {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
@@ -2267,6 +2295,93 @@ function StatBar({ label, value, icon }) {
   return <div className="rounded-2xl border border-white/60 bg-white/70 p-4 dark:border-white/10 dark:bg-white/10"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300">{icon}{label}</div><span className="font-black">{value}%</span></div><div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-200/70 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-500" style={{ width: `${value}%` }} /></div></div>;
 }
 
+
+const quickChatMessages = [
+  'Myslím na tebe ❤️',
+  'Potřebuju obejmout',
+  'Mám chuť na tebe',
+  'Miluju tě',
+  'Máš dnes večer chvilku jen pro nás?',
+  'Děkuju za tebe'
+];
+
+function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, currentUserId, partnerName }) {
+  const sortedMessages = [...posts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const partnerLabel = partnerName?.trim() || 'Partner/ka';
+
+  return (
+    <Card>
+      <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-3xl font-black">Chat</h2>
+          <p className="mt-1 text-gray-500 dark:text-gray-300">Rychlá komunikace jen pro vás dva, oddělená od feedu.</p>
+        </div>
+        <div className="rounded-2xl bg-pink-50 px-4 py-3 text-sm font-bold text-pink-700 dark:bg-white/10 dark:text-pink-100">
+          {sortedMessages.length} zpráv
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {quickChatMessages.map((text) => (
+          <button
+            key={text}
+            type="button"
+            onClick={() => sendMessage(text)}
+            className="rounded-full border border-pink-100 bg-white px-4 py-2 text-sm font-bold text-pink-600 shadow-sm transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:text-pink-100 dark:hover:bg-white/15"
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-5 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <TextInput
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={(event) => event.key === 'Enter' && sendMessage()}
+          placeholder="Napiš zprávu partnerovi..."
+        />
+        <button
+          type="button"
+          onClick={() => sendMessage()}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white shadow-lg hover:bg-pink-600"
+        >
+          <Send size={18} /> Poslat
+        </button>
+      </div>
+
+      {sortedMessages.length === 0 ? (
+        <EmptyState title="Zatím žádný chat" text="Pošli první rychlou zprávu nebo použij jednu z připravených reakcí nahoře." icon={MessageCircle} />
+      ) : (
+        <div className="max-h-[650px] space-y-3 overflow-auto rounded-[2rem] border border-pink-100 bg-white/50 p-3 dark:border-white/10 dark:bg-white/5 sm:p-4">
+          {sortedMessages.map((post) => {
+            const isMine = post.author_id === currentUserId;
+            return (
+              <article key={post.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[88%] rounded-[1.5rem] px-4 py-3 shadow-sm sm:max-w-[72%] ${isMine ? 'rounded-br-md bg-pink-500 text-white' : 'rounded-bl-md border border-pink-100 bg-white text-gray-900 dark:border-white/10 dark:bg-white/10 dark:text-white'}`}>
+                  <div className={`mb-1 text-xs font-black ${isMine ? 'text-white/80' : 'text-gray-500 dark:text-gray-300'}`}>
+                    {isMine ? 'Ty' : partnerLabel} · {formatDate(post.created_at)}
+                  </div>
+                  <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+                  {isMine && (
+                    <button
+                      type="button"
+                      onClick={() => deletePost?.(post)}
+                      className="mt-2 text-xs font-black underline decoration-white/50 underline-offset-4"
+                    >
+                      Smazat
+                    </button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, vanishMode, openImage }) {
   return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} openImage={openImage} deletePost={deletePost} /></Card>;
 }
@@ -2790,7 +2905,7 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
 }
 
 function BottomNav({ activeTab, setActiveTab }) {
-  return <nav className="fixed bottom-3 left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-6 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/50 sm:flex sm:max-w-3xl sm:justify-around sm:p-3">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition sm:px-3 md:px-4 ${activeTab === item.id ? 'bg-pink-500 text-white' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon size={18} /><span className="max-w-full truncate text-[9px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
+  return <nav className="fixed bottom-3 left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-7 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/50 sm:flex sm:max-w-3xl sm:justify-around sm:p-3">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition sm:px-3 md:px-4 ${activeTab === item.id ? 'bg-pink-500 text-white' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon size={18} /><span className="max-w-full truncate text-[9px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
 }
 
 function InfoTile({ title, value, icon }) {
