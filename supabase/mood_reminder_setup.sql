@@ -1,15 +1,29 @@
--- MoodSync daily mood reminder notes
--- 1) Deploy function:
--- npx supabase functions deploy mood-daily-reminder
+-- MoodSync scheduled reminders
 --
--- 2) Optional secret for cron calls:
+-- What this function sends:
+-- 1) Daily thermometer reminder: once per user per Prague day if the user has not updated the thermometer/status today.
+-- 2) 48h inactivity nudge: if the user has not updated status and has not posted anything for ~48h.
+-- 3) 72h quiet-couple nudge: if the couple feed/chat has been quiet for ~72h.
+--
+-- Required first:
+-- 1) Run supabase/engagement_reminders_setup.sql in Supabase SQL Editor.
+-- 2) Deploy/update Edge Function mood-daily-reminder.
+-- 3) Make sure these secrets exist:
+--    VAPID_PUBLIC_KEY
+--    VAPID_PRIVATE_KEY
+--    VAPID_SUBJECT=mailto:your@email.cz
+--    SUPABASE_URL
+--    SUPABASE_SERVICE_ROLE_KEY
+--
+-- Optional secret for scheduled calls:
 -- npx supabase secrets set MOOD_REMINDER_SECRET="your-long-random-secret"
---
--- 3) Schedule it once per day from Supabase Dashboard:
--- Edge Functions -> mood-daily-reminder -> Schedule
--- Example: every day at 20:00.
--- If using MOOD_REMINDER_SECRET, send header:
+-- If using it, call the function with header:
 -- x-cron-secret: your-long-random-secret
 --
--- The function sends a push reminder to users whose couple_status is older than 24 hours
--- or missing. In the app, stale moods are hidden after 24 hours.
+-- Recommended schedule:
+-- Supabase Dashboard -> Edge Functions -> mood-daily-reminder -> Schedule
+-- Run once daily in the evening, e.g. 20:00 Europe/Prague.
+-- If Supabase asks for UTC cron, use 18:00 UTC in summer and 19:00 UTC in winter,
+-- or simply schedule around 19:00 UTC year-round.
+--
+-- You can also run it hourly; push_notification_log prevents duplicate daily/periodic nudges.
