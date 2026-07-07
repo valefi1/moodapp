@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   AlertCircle,
@@ -45,6 +45,8 @@ const LOCAL_KEY = 'moodsync-ui-v2';
 const STORAGE_BUCKET = 'couple-media';
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 const ENC_KEY_SESSION = 'moodsync-e2ee-passphrase';
+const ENC_KEY_DEVICE = 'moodsync-e2ee-passphrase-device';
+const STATUS_NOTIFY_DELAY_MS = 1800;
 
 const moods = [
   { id: 'love', icon: Heart, label: 'Zamilovaný/á', color: 'from-pink-400 to-rose-500', tone: 'positive' },
@@ -633,15 +635,22 @@ export default function App() {
   const [panicMode, setPanicMode] = useState(local.panicMode ?? true);
   const [vanishMode, setVanishMode] = useState(local.vanishMode ?? true);
   const [toast, setToast] = useState('');
+  const [e2eePrompt, setE2eePrompt] = useState('');
   const [creatingCouple, setCreatingCouple] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [encryptionPassphrase, setEncryptionPassphrase] = useState(() => sessionStorage.getItem(ENC_KEY_SESSION) || '');
+  const [encryptionPassphrase, setEncryptionPassphrase] = useState(() => sessionStorage.getItem(ENC_KEY_SESSION) || localStorage.getItem(ENC_KEY_DEVICE) || '');
+  const statusNotifyTimers = useRef({});
 
   const isBackendReady = Boolean(supabase);
   const selectedMood = moods.find((mood) => mood.id === selectedMoodId) || moods[0];
   const appClass = dark ? 'dark' : '';
   const encryptionReady = Boolean(couple?.id && encryptionPassphrase);
+
+  function showE2eePrompt(context = 'fotky') {
+    setE2eePrompt(context);
+    setToast('Fotku jsem nenahrál/a: nejdřív aktivuj společné E2EE heslo v profilu.');
+  }
 
   useEffect(() => {
     saveLocalState({ dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode });
@@ -1053,16 +1062,35 @@ export default function App() {
     }
   }
 
-  async function updateHeatValue(value) {
-    setHeat(value);
-    await saveMyStatus({ heat: value });
-    await notifyPartner('heat_changed', 'MoodSync', 'Partner/ka změnil/a teploměr nadrženosti.');
+  function scheduleStatusNotification(field, value) {
+    const normalizedValue = Number(value);
+    if (!Number.isFinite(normalizedValue)) return;
+
+    clearTimeout(statusNotifyTimers.current[field]);
+    statusNotifyTimers.current[field] = window.setTimeout(async () => {
+      try {
+        await saveMyStatus({ [field]: normalizedValue });
+        if (field === 'heat') {
+          await notifyPartner('heat_changed', 'MoodSync', `Partner/ka nastavil/a teploměr nadrženosti na ${normalizedValue} %.`);
+        } else {
+          await notifyPartner('closeness_changed', 'MoodSync', `Partner/ka nastavil/a teploměr blízkosti na ${normalizedValue} %.`);
+        }
+      } catch (error) {
+        setToast(`Změnu teploměru se nepodařilo uložit: ${error.message}`);
+      }
+    }, STATUS_NOTIFY_DELAY_MS);
   }
 
-  async function updateClosenessValue(value) {
-    setCloseness(value);
-    await saveMyStatus({ closeness: value });
-    await notifyPartner('closeness_changed', 'MoodSync', 'Partner/ka změnil/a teploměr blízkosti.');
+  function updateHeatValue(value) {
+    const nextValue = Number(value);
+    setHeat(nextValue);
+    scheduleStatusNotification('heat', nextValue);
+  }
+
+  function updateClosenessValue(value) {
+    const nextValue = Number(value);
+    setCloseness(nextValue);
+    scheduleStatusNotification('closeness', nextValue);
   }
 
   async function updateMoodValue(moodId) {
@@ -1191,7 +1219,7 @@ export default function App() {
     if (!couple?.id || !file) return;
 
     try {
-      if (!encryptionPassphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu.');
+      if (!encryptionPassphrase) { showE2eePrompt('profilová fotka páru'); return; }
       const uploaded = await uploadToStorage(file, `${couple.id}/profile`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
       const avatarPath = uploaded.path;
       const { data, error } = await supabase
@@ -1248,7 +1276,7 @@ export default function App() {
     if (!couple?.id) return setToast('Nejdřív vytvoř nebo připoj pár.');
     if (!file) return;
     try {
-      if (!encryptionPassphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu. Bez něj se intimní fotky nenahrávají.');
+      if (!encryptionPassphrase) { showE2eePrompt('galerie a feed'); return; }
       const uploaded = await uploadToStorage(file, `${couple.id}/gallery`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
       const imagePath = uploaded.path;
       const { error } = await supabase.from('posts').insert({
@@ -1425,7 +1453,7 @@ export default function App() {
   async function uploadKamaPhoto(positionId, file) {
     if (!couple?.id || !file) return;
     try {
-      if (!encryptionPassphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu. Bez něj se intimní fotky nenahrávají.');
+      if (!encryptionPassphrase) { showE2eePrompt('Kamasutra fotky'); return; }
       const uploaded = await uploadToStorage(file, `${couple.id}/kamasutra`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
       const photoPath = uploaded.path;
       const existing = kamaProgress.find((item) => item.position_id === positionId);
@@ -1551,19 +1579,28 @@ export default function App() {
     }
   }
 
-  function saveEncryptionPassphrase(value) {
-    setEncryptionPassphrase(value);
-    if (value) {
-      sessionStorage.setItem(ENC_KEY_SESSION, value);
-      setToast('E2EE heslo je aktivní na tomto zařízení. Nové fotky se budou šifrovat před uploadem.');
+  function saveEncryptionPassphrase(value, rememberOnDevice = false) {
+    const cleanValue = value.trim();
+    setEncryptionPassphrase(cleanValue);
+    if (cleanValue) {
+      sessionStorage.setItem(ENC_KEY_SESSION, cleanValue);
+      if (rememberOnDevice) {
+        localStorage.setItem(ENC_KEY_DEVICE, cleanValue);
+        setToast('E2EE heslo je aktivní a zapamatované na tomto zařízení. Používej to jen na vlastním mobilu.');
+      } else {
+        localStorage.removeItem(ENC_KEY_DEVICE);
+        setToast('E2EE heslo je aktivní do zavření aplikace. Nové fotky se budou šifrovat před uploadem.');
+      }
     } else {
       sessionStorage.removeItem(ENC_KEY_SESSION);
+      localStorage.removeItem(ENC_KEY_DEVICE);
       setToast('E2EE heslo bylo vymazané z tohoto zařízení.');
     }
   }
 
   async function signOut() {
     sessionStorage.removeItem(ENC_KEY_SESSION);
+    localStorage.removeItem(ENC_KEY_DEVICE);
     setEncryptionPassphrase('');
     await supabase.auth.signOut();
     setSession(null);
@@ -1649,6 +1686,14 @@ export default function App() {
             </div>
           )}
 
+          {e2eePrompt && (
+            <E2eePhotoGuardBanner
+              context={e2eePrompt}
+              onProfile={() => { setActiveTab('profile'); setE2eePrompt(''); }}
+              onClose={() => setE2eePrompt('')}
+            />
+          )}
+
           {activeTab === 'home' && (
             <HomePanel
               profile={profile}
@@ -1690,10 +1735,10 @@ export default function App() {
 
           <AppErrorBoundary resetKey={activeTab}>
             {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} />}
-            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
-            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} />}
+            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} />}
+            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
-            {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} />}
+            {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
         </div>
@@ -1745,6 +1790,46 @@ function MissingBackend() {
 `}VITE_SUPABASE_ANON_KEY=tvuj_publishable_anon_key</pre>
       </Card>
     </main>
+  );
+}
+
+
+function E2eePhotoGuardBanner({ context, onProfile, onClose }) {
+  return (
+    <div className="rounded-[2rem] border-2 border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-lg dark:border-amber-400/40 dark:bg-amber-400/10 dark:text-amber-100">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-400 text-gray-900"><Lock size={20} /></div>
+          <div className="min-w-0">
+            <div className="font-black">Fotka se nenahrála — chybí E2EE heslo</div>
+            <p className="mt-1 text-sm font-bold text-amber-800 dark:text-amber-100/80">
+              Pro {context || 'fotky'} nejdřív aktivuj společné E2EE heslo v profilu. Bez něj aplikace fotky z bezpečnostních důvodů neuloží do Supabase.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" onClick={onProfile} className="rounded-2xl bg-gray-900 px-4 py-3 text-sm font-black text-white dark:bg-white dark:text-gray-900">Nastavit heslo</button>
+          <button type="button" onClick={onClose} className="rounded-2xl border border-amber-300 px-4 py-3 text-sm font-black dark:border-amber-400/30">Zavřít</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function E2eeInlineNotice({ encryptionReady, onProfile, compact = false }) {
+  if (encryptionReady) return (
+    <div className={`rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200 ${compact ? '' : 'mb-5'}`}>
+      🔒 E2EE heslo je aktivní. Nové fotky se před uploadem šifrují v prohlížeči.
+    </div>
+  );
+
+  return (
+    <div className={`rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100 ${compact ? '' : 'mb-5'}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <span>🔒 Fotky jsou zamčené. Nejdřív aktivuj společné E2EE heslo v profilu.</span>
+        <button type="button" onClick={onProfile} className="rounded-xl bg-gray-900 px-4 py-2 text-white dark:bg-white dark:text-gray-900">Nastavit heslo</button>
+      </div>
+    </div>
   );
 }
 
@@ -2382,11 +2467,11 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, c
   );
 }
 
-function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, vanishMode, openImage }) {
-  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} openImage={openImage} deletePost={deletePost} /></Card>;
+function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, vanishMode, openImage, encryptionReady, onMissingE2EE }) {
+  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} openImage={openImage} deletePost={deletePost} /></Card>;
 }
 
-function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, vanishMode, openImage }) {
+function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, vanishMode, openImage, encryptionReady, onMissingE2EE }) {
   return (
     <Card>
       <div className="mb-5">
@@ -2417,7 +2502,8 @@ function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCate
         </select>
       </div>
 
-      <GalleryUploadForm addPhoto={addPhoto} />
+      <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} />
+      <GalleryUploadForm addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} />
       <FeedList
         posts={posts}
         panicMode={panicMode}
@@ -2430,15 +2516,48 @@ function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCate
   );
 }
 
-function GalleryUploadForm({ addPhoto }) {
+function GalleryUploadForm({ addPhoto, encryptionReady, onMissingE2EE }) {
   const [caption, setCaption] = useState('');
   const [category, setCategory] = useState('romantic');
-  function handleUpload(file) { addPhoto(file, { text: caption, photoCategory: category }); setCaption(''); }
-  return <div className="mb-6 rounded-[2rem] border border-pink-100 bg-pink-50 p-5 dark:border-white/10 dark:bg-white/5"><div className="grid gap-4 lg:grid-cols-[1fr_220px_auto] lg:items-end"><label className="grid gap-2 text-sm font-bold">Popisek fotky<TextInput value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Naše soukromá vzpomínka..." /></label><label className="grid gap-2 text-sm font-bold">Kategorie<select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{photoCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600"><input type="file" accept="image/*" className="hidden" onChange={(event) => handleUpload(event.target.files?.[0])} /><Image size={18} /> Nahrát fotku</label></div></div>;
+  function handleUpload(file) {
+    if (!file) return;
+    if (!encryptionReady) { onMissingE2EE?.(); return; }
+    addPhoto(file, { text: caption, photoCategory: category });
+    setCaption('');
+  }
+  return <div className="mb-6 rounded-[2rem] border border-pink-100 bg-pink-50 p-5 dark:border-white/10 dark:bg-white/5"><div className="grid gap-4 lg:grid-cols-[1fr_220px_auto] lg:items-end"><label className="grid gap-2 text-sm font-bold">Popisek fotky<TextInput value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Naše soukromá vzpomínka..." /></label><label className="grid gap-2 text-sm font-bold">Kategorie<select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{photoCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>{encryptionReady ? <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600"><input type="file" accept="image/*" className="hidden" onChange={(event) => { handleUpload(event.target.files?.[0]); event.target.value = ''; }} /><Image size={18} /> Nahrát fotku</label> : <button type="button" onClick={onMissingE2EE} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-400 px-5 py-3 font-black text-gray-900 hover:bg-amber-300"><Lock size={18} /> Nastavit E2EE heslo</button>}</div></div>;
 }
 
-function PhotoUploadButton({ addPhoto }) {
-  return <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600"><input type="file" accept="image/*" className="hidden" onChange={(event) => addPhoto(event.target.files?.[0])} /><Plus size={18} /> Přidat fotku</label>;
+function PhotoUploadButton({ addPhoto, encryptionReady, onMissingE2EE }) {
+  const [uploading, setUploading] = useState(false);
+
+  async function handleChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || uploading) return;
+    if (!encryptionReady) { onMissingE2EE?.(); return; }
+    setUploading(true);
+    try {
+      await addPhoto(file, { photoCategory: 'romantic', text: 'Fotka z feedu' });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (!encryptionReady) {
+    return (
+      <button type="button" onClick={onMissingE2EE} className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 px-5 py-3 font-black text-gray-900 hover:bg-amber-300">
+        <Lock size={18} /> Nastavit E2EE pro fotky
+      </button>
+    );
+  }
+
+  return (
+    <label className={`inline-flex cursor-pointer items-center gap-2 rounded-2xl px-5 py-3 font-black text-white ${uploading ? 'bg-pink-300' : 'bg-pink-500 hover:bg-pink-600'}`}>
+      <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={handleChange} />
+      <Plus size={18} /> {uploading ? 'Nahrávám...' : 'Přidat fotku'}
+    </label>
+  );
 }
 
 function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage, deletePost }) {
@@ -2731,7 +2850,7 @@ function ChallengeEditor({ addChallenge }) {
   );
 }
 
-function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, setKamaSearch, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto }) {
+function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, setKamaSearch, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto, encryptionReady, onMissingE2EE }) {
   const completed = kamaProgress.filter((item) => item.completed).length;
   const progress = Math.round((completed / Math.max(1, kamaPositions.length)) * 100);
   const typeFilters = ['all', 'Vaginální', 'Orální', 'Romantické'];
@@ -2796,6 +2915,8 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
         </div>
       </Card>
 
+      <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} compact />
+
       {filtered.length === 0 ? (
         <EmptyState title="Žádná poloha nenalezena" text="Zkuste kratší výraz, jiný typ nebo vypnout některý filtr." icon={Search} />
       ) : (
@@ -2822,7 +2943,25 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
                     <ExternalLink size={14} /> {hasLovinoPositionUrl ? 'Zobrazit polohu na Lovino.cz' : 'Otevřít Kamasutru na Lovino.cz'}
                   </a>
                   <button onClick={() => toggleKama(position.id)} className={`mt-2 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Splnit'}</button>
-                  {item?.completed && <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-2 py-2.5 text-center text-[10px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200 sm:text-[11px]"><input type="file" accept="image/*" className="hidden" onChange={(event) => uploadKamaPhoto(position.id, event.target.files?.[0])} />{item?.signedUrl ? 'Změnit fotku' : 'Přidat fotku'}</label>}
+                  {encryptionReady ? (
+                    <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-2 py-2.5 text-center text-[10px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200 sm:text-[11px]">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = '';
+                          uploadKamaPhoto(position.id, file);
+                        }}
+                      />
+                      {item?.signedUrl ? 'Změnit fotku' : 'Přidat fotku k poloze'}
+                    </label>
+                  ) : (
+                    <button type="button" onClick={onMissingE2EE} className="mt-2 flex w-full items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 px-2 py-2.5 text-center text-[10px] font-black text-amber-700 hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200 sm:text-[11px]">
+                      <Lock size={14} /> Nejdřív E2EE heslo
+                    </button>
+                  )}
                   {item?.signedUrl && <img src={item.signedUrl} alt={position.title} className="mt-3 h-28 w-full rounded-2xl object-cover shadow-xl sm:h-36" />}
                   {item?.locked && <div className="mt-3 rounded-2xl bg-gray-900 p-3 text-center text-xs font-bold text-white"><Lock className="mx-auto mb-1" size={16} />Šifrovaná fotka</div>}
                 </div>
@@ -2853,6 +2992,23 @@ function PoseGuide({ pose, title, compact = false }) {
 }
 
 function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartnerName, updateProfileName, uploadCoupleAvatar, encryptionPassphrase, saveEncryptionPassphrase, signOut }) {
+  const [draftPassphrase, setDraftPassphrase] = useState(encryptionPassphrase || '');
+  const [rememberOnDevice, setRememberOnDevice] = useState(() => Boolean(localStorage.getItem(ENC_KEY_DEVICE)));
+
+  useEffect(() => {
+    setDraftPassphrase(encryptionPassphrase || '');
+  }, [encryptionPassphrase]);
+
+  function activatePassphrase() {
+    saveEncryptionPassphrase(draftPassphrase, rememberOnDevice);
+  }
+
+  function clearPassphrase() {
+    setDraftPassphrase('');
+    setRememberOnDevice(false);
+    saveEncryptionPassphrase('', false);
+  }
+
   return (
     <Card>
       <h2 className="text-3xl font-black">Profil a nastavení</h2>
@@ -2883,12 +3039,20 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
               Zadejte společné heslo, které znáte jen vy dva. Galerie, Kamasutra fotky i profilová fotka páru se zašifrují v prohlížeči ještě před uploadem do Supabase.
             </p>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <TextInput type="password" placeholder="Společné E2EE heslo" value={encryptionPassphrase} onChange={(event) => saveEncryptionPassphrase(event.target.value)} />
-              <button type="button" onClick={() => saveEncryptionPassphrase('')} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Vymazat z tohoto zařízení</button>
+            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+              <TextInput type="password" placeholder="Společné E2EE heslo" value={draftPassphrase} onChange={(event) => setDraftPassphrase(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && activatePassphrase()} />
+              <button type="button" onClick={activatePassphrase} className="rounded-2xl bg-emerald-600 px-5 py-3 font-black text-white hover:bg-emerald-700">Aktivovat heslo</button>
+              <button type="button" onClick={clearPassphrase} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Vymazat</button>
             </div>
+            <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl bg-white/70 p-3 text-sm dark:bg-white/10">
+              <input type="checkbox" checked={rememberOnDevice} onChange={(event) => setRememberOnDevice(event.target.checked)} className="mt-1" />
+              <span>
+                <span className="font-black">Zapamatovat na tomto zařízení</span>
+                <span className="mt-1 block text-xs text-gray-500 dark:text-gray-300">Pohodlnější na vlastním mobilu, ale méně bezpečné při ztrátě zařízení. Bez zaškrtnutí heslo zmizí po zavření aplikace.</span>
+              </span>
+            </label>
             <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-              Heslo se neukládá do cloudu. Když ho zapomenete, staré šifrované fotky nepůjde obnovit.
+              Heslo se neukládá do cloudu. Když ho zapomenete, staré šifrované fotky nepůjde obnovit. Zadání se teď potvrzuje tlačítkem, takže se neaktivuje po každém znaku.
             </p>
           </div>
 
