@@ -105,6 +105,31 @@ const partnerDayCards = [
   },
 ];
 
+
+const dailyStatusOptions = [
+  { id: 'open', label: 'Jsem otevřený/á', icon: '🟢', message: 'Dnešní status: jsem otevřený/á blízkosti a kontaktu.' },
+  { id: 'soft', label: 'Potřebuju jemnost', icon: '🟡', message: 'Dnešní status: potřebuju spíš jemnost, klid a trpělivost.' },
+  { id: 'hug', label: 'Chci obejmout', icon: '🤗', message: 'Dnešní status: nejvíc by mi pomohlo objetí a blízkost.' },
+  { id: 'flirt', label: 'Chci flirt', icon: '🔥', message: 'Dnešní status: mám chuť flirtovat a hrát si.' },
+  { id: 'talk', label: 'Chci si promluvit', icon: '💬', message: 'Dnešní status: chtěl/a bych si v klidu promluvit.' },
+  { id: 'quiet', label: 'Dnes jen klid', icon: '🔴', message: 'Dnešní status: dnes prosím jen klid, bez tlaku.' },
+];
+
+const eveningRitualItems = [
+  { id: 'thermo', label: 'Nastavit teploměr', helper: 'Aktualizujte blízkost a chuť, ať se nemusíte dohadovat.' },
+  { id: 'thanks', label: 'Jedna věc díky', helper: 'Napište jednu konkrétní věc, za kterou jste dnes vděční.' },
+  { id: 'touch', label: '10 minut pro nás', helper: 'Domluvte si krátký čas bez mobilu, jen pro vás dva.' },
+];
+
+const chatReactions = ['❤️', '🔥', '🥺', '😘', '🤗', '😂'];
+
+const wishCategories = [
+  { id: 'experience', label: 'Chci zažít', prefix: 'Chci zažít' },
+  { id: 'get', label: 'Chci dostat', prefix: 'Chci dostat' },
+  { id: 'try', label: 'Chci vyzkoušet', prefix: 'Chci vyzkoušet' },
+  { id: 'know', label: 'Chci, abys věděl/a', prefix: 'Chci, abys věděl/a' },
+];
+
 const surpriseIdeas = [
   { type: 'Otázka', text: 'Jaký malý dotek nebo gesto ti nejvíc dává pocit, že jsem tu pro tebe?' },
   { type: 'Mini výzva', text: 'Pošli partnerovi jeden kompliment a jednu věc, na kterou se spolu těšíš.' },
@@ -1272,6 +1297,35 @@ export default function App() {
     await notifyPartner('message_added', 'MoodSync', 'Partner/ka ti poslal/a novou zprávu.');
   }
 
+
+  async function sendDailyStatus(status) {
+    if (!couple?.id || !session?.user?.id || !status?.message) return;
+    const { error } = await supabase.from('posts').insert({
+      couple_id: couple.id,
+      author_id: session.user.id,
+      type: 'status',
+      text: `${status.icon} ${status.message}`,
+    });
+    if (error) return setToast(error.message);
+    await loadPosts(couple.id);
+    await notifyPartner('daily_status', 'MoodSync status', `${status.icon} ${status.label}`);
+    setToast(`Status odeslán: ${status.label}`);
+  }
+
+  async function completeEveningRitual(item) {
+    if (!couple?.id || !session?.user?.id || !item) return;
+    const { error } = await supabase.from('posts').insert({
+      couple_id: couple.id,
+      author_id: session.user.id,
+      type: 'ritual',
+      text: `Večerní rituál: ${item.label}`,
+    });
+    if (error) return setToast(error.message);
+    await loadPosts(couple.id);
+    await notifyPartner('evening_ritual', 'MoodSync rituál', `Partner/ka označil/a krok večerního rituálu: ${item.label}.`);
+    setToast(`Rituál označen: ${item.label}`);
+  }
+
   async function addPhoto(file, options = {}) {
     if (!couple?.id) return setToast('Nejdřív vytvoř nebo připoj pár.');
     if (!file) return;
@@ -1447,6 +1501,34 @@ export default function App() {
     if (nextCompleted) {
       const position = kamaPositions.find((item) => item.id === positionId);
       await notifyPartner('kamasutra_completed', 'MoodSync', `Partner/ka označil/a polohu ${position?.title || ''} jako splněnou.`);
+    }
+  }
+
+  async function updateKamaPreference(positionId, patch) {
+    if (!couple?.id || !positionId) return;
+    const existing = kamaProgress.find((item) => item.position_id === positionId);
+    const payload = { ...patch, updated_at: new Date().toISOString() };
+
+    if (existing) {
+      const { error } = await supabase.from('kama_progress').update(payload).eq('id', existing.id);
+      if (error) return setToast(`Kamasutra se nepodařila upravit: ${error.message}`);
+    } else {
+      const { error } = await supabase.from('kama_progress').insert({
+        couple_id: couple.id,
+        position_id: positionId,
+        ...patch,
+      });
+      if (error) return setToast(`Kamasutra se nepodařila upravit: ${error.message}`);
+    }
+
+    await loadKamaProgress(couple.id);
+
+    const position = kamaPositions.find((item) => item.id === positionId);
+    if (patch.desire_status === 'want') {
+      await notifyPartner('kamasutra_want_to_try', 'MoodSync Kamasutra', `Partner/ka chce někdy zkusit polohu ${position?.title || ''}.`);
+    }
+    if (patch.favorite === true) {
+      await notifyPartner('kamasutra_favorite', 'MoodSync Kamasutra', `Partner/ka si označil/a polohu ${position?.title || ''} jako oblíbenou.`);
     }
   }
 
@@ -1730,6 +1812,8 @@ export default function App() {
               createSurprise={createSurprise}
               partnerDayCompletions={partnerDayCompletions}
               completePartnerDay={completePartnerDay}
+              sendDailyStatus={sendDailyStatus}
+              completeEveningRitual={completeEveningRitual}
             />
           )}
 
@@ -1738,7 +1822,7 @@ export default function App() {
             {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} />}
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
-            {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
+            {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
         </div>
@@ -2024,7 +2108,7 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
   );
 }
 
-function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, updateChallenge, openChallenges, posts = [], challenges = [], challengeStats = {}, wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay }) {
+function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, updateChallenge, openChallenges, posts = [], challenges = [], challengeStats = {}, wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual }) {
   const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
   const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
   const ownMood = freshOwnStatus?.mood_label ? getMoodByLabel(freshOwnStatus.mood_label) : latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
@@ -2068,6 +2152,11 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
 
       <ActiveChallengeHomeCard challenge={incomingChallenge} outgoingCount={outgoingCount} updateChallenge={updateChallenge} openChallenges={openChallenges} />
 
+      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <DailyStatusCard sendDailyStatus={sendDailyStatus} />
+        <EveningRitualCard completeEveningRitual={completeEveningRitual} posts={posts} />
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <RelationshipScoreCard score={relationshipScore.score} trend={relationshipScore.trend} history={relationshipHistory} />
         <PartnerDayCard card={partnerDay} awardedByMe={partnerDayAwardedByMe} myAward={partnerDayCompletion} completePartnerDay={completePartnerDay} />
@@ -2100,6 +2189,66 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         </div>
       </Card>
     </>
+  );
+}
+
+
+function DailyStatusCard({ sendDailyStatus }) {
+  return (
+    <Card className="bg-gradient-to-br from-white/90 to-rose-50/90 dark:from-white/[0.08] dark:to-pink-500/[0.08]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="text-pink-500" /> Jak na tom dnes jsem</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Rychlý status bez dlouhého vysvětlování. Partner/ka dostane jasný signál.</p>
+        </div>
+        <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-100">1 klepnutí</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {dailyStatusOptions.map((status) => (
+          <button
+            key={status.id}
+            type="button"
+            onClick={() => sendDailyStatus?.(status)}
+            className="rounded-2xl border border-pink-100 bg-white/80 p-3 text-left text-sm font-black transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+          >
+            <span className="mr-2">{status.icon}</span>{status.label}
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function EveningRitualCard({ completeEveningRitual, posts = [] }) {
+  const todayKey = getLocalDateKey();
+  const doneToday = posts.filter((post) => post.type === 'ritual' && String(post.created_at || '').startsWith(todayKey));
+  return (
+    <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-500/10 dark:to-pink-500/10">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 text-xl font-black"><Moon className="text-purple-500" /> Dnes pro nás</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Krátký večerní rituál: ne všechno musí být splněné, stačí jeden malý krok.</p>
+        </div>
+        <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-black text-purple-700 dark:bg-white/10 dark:text-purple-100">{doneToday.length}/{eveningRitualItems.length}</span>
+      </div>
+      <div className="mt-4 grid gap-2">
+        {eveningRitualItems.map((item) => {
+          const done = doneToday.some((post) => String(post.text || '').includes(item.label));
+          return (
+            <button
+              key={item.id}
+              type="button"
+              disabled={done}
+              onClick={() => completeEveningRitual?.(item)}
+              className={`rounded-2xl border p-3 text-left transition ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-100' : 'border-purple-100 bg-white/80 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10'}`}
+            >
+              <div className="font-black">{done ? '✓ ' : ''}{item.label}</div>
+              <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">{item.helper}</div>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
@@ -2167,29 +2316,49 @@ function PartnerDayCard({ card, awardedByMe, myAward, completePartnerDay }) {
 
 function WishlistHomeCard({ items, currentUserId, addWishlistItem, completeWishlistItem }) {
   const [title, setTitle] = useState('');
-  const openItems = items.filter((item) => !item.fulfilled).slice(0, 5);
+  const [category, setCategory] = useState(wishCategories[0].id);
+  const openItems = items.filter((item) => !item.fulfilled).slice(0, 6);
+  const selectedCategory = wishCategories.find((item) => item.id === category) || wishCategories[0];
   function submit() {
-    if (!title.trim()) return;
-    addWishlistItem?.(title);
+    const cleanTitle = title.trim();
+    if (!cleanTitle) return;
+    const normalizedTitle = cleanTitle.toLowerCase().startsWith(selectedCategory.prefix.toLowerCase())
+      ? cleanTitle
+      : `${selectedCategory.prefix}: ${cleanTitle}`;
+    addWishlistItem?.(normalizedTitle);
     setTitle('');
   }
   return (
     <Card>
-      <h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-pink-500" /> Wishlist přání</h3>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Přidejte si přání, která může partner/ka splnit pro radost nebo smazání dluhu.</p>
+      <h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-pink-500" /> Přáníčka</h3>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Přání už nejsou jen seznam. Vyber kategorii a dej partnerovi jasnější signál, co by ti udělalo radost.</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {wishCategories.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setCategory(item.id)}
+            className={`rounded-full px-4 py-2 text-xs font-black transition ${category === item.id ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-700 dark:bg-white/10 dark:text-pink-100'}`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Masáž, večeře, wellness..." />
+        <TextInput value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} placeholder={`${selectedCategory.label.toLowerCase()}...`} />
         <button onClick={submit} className="shrink-0 rounded-2xl bg-pink-500 px-4 py-2 font-black text-white">Přidat</button>
       </div>
       <div className="mt-4 grid gap-2">
-        {openItems.length === 0 && <div className="rounded-2xl bg-pink-50 p-4 text-sm font-bold text-gray-500 dark:bg-white/5 dark:text-gray-300">Zatím žádná otevřená přání.</div>}
+        {openItems.length === 0 && <div className="rounded-2xl bg-pink-50 p-4 text-sm font-bold text-gray-500 dark:bg-white/5 dark:text-gray-300">Zatím žádná otevřená přáníčka.</div>}
         {openItems.map((item) => (
           <div key={item.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-pink-100 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 flex-1">
               <div className="whitespace-normal break-words font-black leading-snug">{item.title}</div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.user_id === currentUserId ? 'Moje přání' : 'Přání partnera/partnerky'}</div>
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.user_id === currentUserId ? 'Moje přáníčko' : 'Přáníčko partnera/partnerky'}</div>
             </div>
-            <button onClick={() => completeWishlistItem?.(item)} className="w-full shrink-0 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white sm:w-auto">Splnit</button>
+            <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+              <button onClick={() => completeWishlistItem?.(item)} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white sm:flex-none">Splnit</button>
+            </div>
           </div>
         ))}
       </div>
@@ -2393,76 +2562,104 @@ const quickChatMessages = [
 function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, currentUserId, partnerName }) {
   const sortedMessages = [...posts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   const partnerLabel = partnerName?.trim() || 'Partner/ka';
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [sortedMessages.length]);
 
   return (
-    <Card>
-      <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <h2 className="text-3xl font-black">Chat</h2>
-          <p className="mt-1 text-gray-500 dark:text-gray-300">Rychlá komunikace jen pro vás dva, oddělená od feedu.</p>
+    <Card className="flex h-[calc(100dvh-9.5rem)] min-h-[560px] flex-col overflow-hidden p-0 sm:h-[calc(100dvh-11rem)]">
+      <div className="shrink-0 border-b border-pink-100/80 bg-white/80 p-4 backdrop-blur dark:border-white/10 dark:bg-gray-950/60 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-2xl font-black sm:text-3xl">Chat</h2>
+            <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-300">Rychlá komunikace jen pro vás dva.</p>
+          </div>
+          <div className="shrink-0 rounded-2xl bg-pink-50 px-3 py-2 text-xs font-bold text-pink-700 dark:bg-white/10 dark:text-pink-100 sm:text-sm">
+            {sortedMessages.length} zpráv
+          </div>
         </div>
-        <div className="rounded-2xl bg-pink-50 px-4 py-3 text-sm font-bold text-pink-700 dark:bg-white/10 dark:text-pink-100">
-          {sortedMessages.length} zpráv
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {quickChatMessages.map((text) => (
+            <button
+              key={text}
+              type="button"
+              onClick={() => sendMessage(text)}
+              className="shrink-0 rounded-full border border-pink-100 bg-white px-4 py-2 text-sm font-bold text-pink-600 shadow-sm transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:text-pink-100 dark:hover:bg-white/15"
+            >
+              {text}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {quickChatMessages.map((text) => (
-          <button
-            key={text}
-            type="button"
-            onClick={() => sendMessage(text)}
-            className="rounded-full border border-pink-100 bg-white px-4 py-2 text-sm font-bold text-pink-600 shadow-sm transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:text-pink-100 dark:hover:bg-white/15"
-          >
-            {text}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-5 grid gap-2 sm:grid-cols-[1fr_auto]">
-        <TextInput
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          onKeyDown={(event) => event.key === 'Enter' && sendMessage()}
-          placeholder="Napiš zprávu partnerovi..."
-        />
-        <button
-          type="button"
-          onClick={() => sendMessage()}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white shadow-lg hover:bg-pink-600"
-        >
-          <Send size={18} /> Poslat
-        </button>
-      </div>
-
-      {sortedMessages.length === 0 ? (
-        <EmptyState title="Zatím žádný chat" text="Pošli první rychlou zprávu nebo použij jednu z připravených reakcí nahoře." icon={MessageCircle} />
-      ) : (
-        <div className="max-h-[650px] space-y-3 overflow-auto rounded-[2rem] border border-pink-100 bg-white/50 p-3 dark:border-white/10 dark:bg-white/5 sm:p-4">
-          {sortedMessages.map((post) => {
-            const isMine = post.author_id === currentUserId;
-            return (
-              <article key={post.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[88%] rounded-[1.5rem] px-4 py-3 shadow-sm sm:max-w-[72%] ${isMine ? 'rounded-br-md bg-pink-500 text-white' : 'rounded-bl-md border border-pink-100 bg-white text-gray-900 dark:border-white/10 dark:bg-white/10 dark:text-white'}`}>
-                  <div className={`mb-1 text-xs font-black ${isMine ? 'text-white/80' : 'text-gray-500 dark:text-gray-300'}`}>
-                    {isMine ? 'Ty' : partnerLabel} · {formatDate(post.created_at)}
+      <div className="flex-1 overflow-y-auto bg-white/35 p-3 dark:bg-white/[0.03] sm:p-4">
+        {sortedMessages.length === 0 ? (
+          <div className="flex min-h-full items-end">
+            <EmptyState title="Zatím žádný chat" text="Pošli první rychlou zprávu, použij připravenou větu nebo emoji reakci." icon={MessageCircle} />
+          </div>
+        ) : (
+          <div className="flex min-h-full flex-col justify-end gap-3">
+            {sortedMessages.map((post) => {
+              const isMine = post.author_id === currentUserId;
+              return (
+                <article key={post.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[88%] rounded-[1.5rem] px-4 py-3 shadow-sm sm:max-w-[72%] ${isMine ? 'rounded-br-md bg-pink-500 text-white' : 'rounded-bl-md border border-pink-100 bg-white text-gray-900 dark:border-white/10 dark:bg-white/10 dark:text-white'}`}>
+                    <div className={`mb-1 text-xs font-black ${isMine ? 'text-white/80' : 'text-gray-500 dark:text-gray-300'}`}>
+                      {isMine ? 'Ty' : partnerLabel} · {formatDate(post.created_at)}
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+                    {!isMine && (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {chatReactions.map((reaction) => (
+                          <button
+                            key={reaction}
+                            type="button"
+                            onClick={() => sendMessage(`${reaction} reakce na zprávu`)}
+                            className="rounded-full bg-pink-50 px-2 py-1 text-sm transition hover:bg-pink-100 dark:bg-white/10 dark:hover:bg-white/15"
+                          >
+                            {reaction}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {isMine && (
+                      <button
+                        type="button"
+                        onClick={() => deletePost?.(post)}
+                        className="mt-2 text-xs font-black underline decoration-white/50 underline-offset-4"
+                      >
+                        Smazat
+                      </button>
+                    )}
                   </div>
-                  <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
-                  {isMine && (
-                    <button
-                      type="button"
-                      onClick={() => deletePost?.(post)}
-                      className="mt-2 text-xs font-black underline decoration-white/50 underline-offset-4"
-                    >
-                      Smazat
-                    </button>
-                  )}
-                </div>
-              </article>
-            );
-          })}
+                </article>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
+
+      <div className="shrink-0 border-t border-pink-100/80 bg-white/95 p-3 backdrop-blur dark:border-white/10 dark:bg-gray-950/95 sm:p-4">
+        <div className="grid gap-2 grid-cols-[1fr_auto]">
+          <TextInput
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => event.key === 'Enter' && sendMessage()}
+            placeholder="Napiš zprávu..."
+          />
+          <button
+            type="button"
+            onClick={() => sendMessage()}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-pink-500 px-4 py-3 font-black text-white shadow-lg hover:bg-pink-600 sm:px-5"
+            aria-label="Poslat zprávu"
+          >
+            <Send size={18} /> <span className="hidden sm:inline">Poslat</span>
+          </button>
         </div>
-      )}
+      </div>
     </Card>
   );
 }
@@ -2592,7 +2789,7 @@ function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage
           ) : (
             <>
               <div className="flex items-center justify-between gap-4">
-                <div className="font-black">{post.type === 'photo' ? 'Fotka' : post.type === 'mood' ? 'Nálada' : 'Zpráva'}</div>
+                <div className="font-black">{post.type === 'photo' ? 'Fotka' : post.type === 'mood' ? 'Nálada' : post.type === 'status' ? 'Status' : post.type === 'ritual' ? 'Rituál' : 'Zpráva'}</div>
                 <div className="flex items-center gap-3">
                   <div className="text-sm text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
                   <button
@@ -2850,8 +3047,10 @@ function ChallengeEditor({ addChallenge }) {
   );
 }
 
-function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, setKamaSearch, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, uploadKamaPhoto, encryptionReady, onMissingE2EE }) {
+function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, setKamaSearch, kamaDifficultyFilter, setKamaDifficultyFilter, oralOnly, setOralOnly, toggleKama, updateKamaPreference, uploadKamaPhoto, encryptionReady, onMissingE2EE }) {
   const completed = kamaProgress.filter((item) => item.completed).length;
+  const wantToTry = kamaProgress.filter((item) => item.desire_status === 'want').length;
+  const favorites = kamaProgress.filter((item) => item.favorite).length;
   const progress = Math.round((completed / Math.max(1, kamaPositions.length)) * 100);
   const typeFilters = ['all', 'Vaginální', 'Orální', 'Romantické'];
   const difficultyFilters = ['all', 'Začátečníci', 'Středně pokročilé', 'Pokročilé'];
@@ -2882,7 +3081,11 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Kamasutra 2.0</div>
             <h2 className="mt-3 text-3xl font-black sm:text-4xl">Kamasutra Journey</h2>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, vyhledávání podle názvu nebo popisu, filtry a rychlý odkaz na detail polohy na Lovino.cz.</p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, vyhledávání podle názvu nebo popisu, filtry, ověřené odkazy na Lovino.cz a nově i stav „chci zkusit / oblíbené / ne pro nás“.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
+              <span className="rounded-full bg-pink-100 px-3 py-1 text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">Chci zkusit: {wantToTry}</span>
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">Oblíbené: {favorites}</span>
+            </div>
           </div>
           <div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-5 text-white shadow-2xl">
             <div className="text-xs font-bold text-white/80">Splněno</div>
@@ -2942,7 +3145,30 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
                   <a href={lovinoUrl} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-pink-50 px-2 py-2 text-center text-[10px] font-black text-pink-700 transition hover:bg-pink-100 dark:border-pink-500/30 dark:bg-pink-500/10 dark:text-pink-200 sm:text-xs">
                     <ExternalLink size={14} /> {hasLovinoPositionUrl ? 'Zobrazit polohu na Lovino.cz' : 'Otevřít Kamasutru na Lovino.cz'}
                   </a>
-                  <button onClick={() => toggleKama(position.id)} className={`mt-2 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Splněno' : 'Splnit'}</button>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateKamaPreference(position.id, { desire_status: item?.desire_status === 'want' ? null : 'want' })}
+                      className={`rounded-2xl px-2 py-2 text-[10px] font-black transition sm:text-xs ${item?.desire_status === 'want' ? 'bg-pink-500 text-white' : 'border border-pink-100 bg-white/80 text-pink-700 dark:border-white/10 dark:bg-white/10 dark:text-pink-200'}`}
+                    >
+                      {item?.desire_status === 'want' ? '✓ Chci zkusit' : 'Chci zkusit'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateKamaPreference(position.id, { favorite: !item?.favorite })}
+                      className={`rounded-2xl px-2 py-2 text-[10px] font-black transition sm:text-xs ${item?.favorite ? 'bg-amber-400 text-gray-900' : 'border border-amber-100 bg-white/80 text-amber-700 dark:border-white/10 dark:bg-white/10 dark:text-amber-200'}`}
+                    >
+                      {item?.favorite ? '★ Oblíbené' : 'Oblíbené'}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateKamaPreference(position.id, { desire_status: item?.desire_status === 'no' ? null : 'no' })}
+                    className={`mt-2 w-full rounded-2xl px-2 py-2 text-[10px] font-black transition sm:text-xs ${item?.desire_status === 'no' ? 'bg-gray-700 text-white' : 'border border-gray-200 bg-white/80 text-gray-600 dark:border-white/10 dark:bg-white/10 dark:text-gray-300'}`}
+                  >
+                    {item?.desire_status === 'no' ? 'Označeno: ne pro nás' : 'Ne pro nás'}
+                  </button>
+                  <button onClick={() => toggleKama(position.id)} className={`mt-2 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Vyzkoušeno' : 'Označit jako vyzkoušené'}</button>
                   {encryptionReady ? (
                     <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-2 py-2.5 text-center text-[10px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200 sm:text-[11px]">
                       <input
