@@ -1054,6 +1054,9 @@ export default function App() {
       const { data, error } = await supabase.functions.invoke('send-push-notification', {
         body: {
           coupleId: couple.id,
+          // Kept for compatibility with the currently deployed function.
+          // The hardened function validates this claim against the JWT.
+          senderId: session.user.id,
           eventType,
           title,
           body,
