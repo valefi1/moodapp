@@ -44,6 +44,10 @@ const ENC_KEY_SESSION = 'moodsync-e2ee-passphrase';
 const ENC_KEY_DEVICE = 'moodsync-e2ee-passphrase-device';
 const STATUS_NOTIFY_DELAY_MS = 1800;
 const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
+const MAX_POSTS = 250;
+const MEDIA_CONCURRENCY = 3;
+const GALLERY_IMAGE_MAX_EDGE = 1600;
+const AVATAR_IMAGE_MAX_EDGE = 800;
 
 const moods = [
   { id: 'love', icon: Heart, label: 'Zamilovaný/á', color: 'from-pink-400 to-rose-500', tone: 'positive' },
@@ -146,6 +150,14 @@ function getLocalDateKey(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function getRecentDateKeys(days = 7) {
+  return new Set(Array.from({ length: days }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - index);
+    return getLocalDateKey(date);
+  }));
 }
 
 function normalizeSearchText(value = '') {
@@ -309,19 +321,25 @@ const kamaPositions = [
 ];
 
 const navItems = [
-  { id: 'home', label: 'Domů', icon: Heart },
+  { id: 'home', label: 'Dnes', icon: Heart },
   { id: 'chat', label: 'Chat', icon: Send },
-  { id: 'feed', label: 'Příspěvky', icon: MessageCircle },
-  { id: 'gallery', label: 'Galerie', icon: Image },
-  { id: 'challenges', label: 'Výzvy', icon: Flame },
+  { id: 'gallery', label: 'Fotky', icon: Image },
+  { id: 'challenges', label: 'Hry', icon: Flame },
+  { id: 'more', label: 'Více', icon: Sparkles },
+];
+
+const secondaryTabs = [
+  { id: 'feed', label: 'Deník páru', icon: MessageCircle },
   { id: 'kamasutra', label: 'Kamasutra', icon: Heart },
   { id: 'profile', label: 'Profil', icon: User },
 ];
 
+const validTabIds = new Set([...navItems, ...secondaryTabs].map((item) => item.id));
+
 function getInitialActiveTab(fallback = 'home') {
   if (typeof window === 'undefined') return fallback;
   const tabFromUrl = new URLSearchParams(window.location.search).get('tab');
-  return navItems.some((item) => item.id === tabFromUrl) ? tabFromUrl : fallback;
+  return validTabIds.has(tabFromUrl) ? tabFromUrl : fallback;
 }
 
 function createPairCode() {
@@ -557,18 +575,46 @@ function getChallengeStats(challenges, currentUserId, partnerDayCompletions = []
   };
 }
 
+async function optimizeImageForUpload(file, maxEdge = GALLERY_IMAGE_MAX_EDGE) {
+  if (!file || !String(file.type || '').startsWith('image/')) return file;
+  if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file;
+
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, width, height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.84));
+    if (!blob || (scale === 1 && blob.size >= file.size)) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'fotka';
+    return new File([blob], `${baseName}.webp`, { type: 'image/webp', lastModified: file.lastModified });
+  } catch {
+    return file;
+  } finally {
+    bitmap?.close?.();
+  }
+}
+
 async function uploadToStorage(file, folder, options = {}) {
   if (!supabase || !file) return null;
   if (!String(file.type || '').startsWith('image/')) throw new Error('Vybraný soubor není podporovaný obrázek.');
   if (file.size > MAX_IMAGE_SIZE_BYTES) throw new Error('Fotka je příliš velká. Maximální velikost je 15 MB.');
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-  let uploadFile = file;
+  const optimizedFile = await optimizeImageForUpload(file, options.maxEdge);
+  const safeName = optimizedFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+  let uploadFile = optimizedFile;
   let uploadName = safeName;
-  let encryption = { encrypted: false, encryptionIv: null, mimeType: file.type || null };
+  let encryption = { encrypted: false, encryptionIv: null, mimeType: optimizedFile.type || null };
 
   if (options.encrypt) {
     if (!options.coupleId || !options.passphrase) throw new Error('Nejdřív nastav společné E2EE heslo v profilu.');
-    const encrypted = await encryptFileForCouple(file, options.coupleId, options.passphrase);
+    const encrypted = await encryptFileForCouple(optimizedFile, options.coupleId, options.passphrase);
     uploadFile = encrypted.blob;
     uploadName = `${safeName}.enc`;
     encryption = { encrypted: true, encryptionIv: encrypted.iv, mimeType: encrypted.mimeType };
@@ -578,7 +624,7 @@ async function uploadToStorage(file, folder, options = {}) {
   const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, uploadFile, {
     cacheControl: '3600',
     upsert: false,
-    contentType: encryption.encrypted ? 'application/octet-stream' : file.type,
+    contentType: encryption.encrypted ? 'application/octet-stream' : optimizedFile.type,
   });
   if (error) throw error;
   return { path, ...encryption };
@@ -635,6 +681,8 @@ export default function App() {
   const [wishlistItems, setWishlistItems] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [partnerDayCompletions, setPartnerDayCompletions] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
   const [surpriseCard, setSurpriseCard] = useState(null);
   const [selectedMoodId, setSelectedMoodId] = useState(local.selectedMoodId || 'love');
   const [heat, setHeat] = useState(local.heat ?? 50);
@@ -657,6 +705,8 @@ export default function App() {
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [encryptionPassphrase, setEncryptionPassphrase] = useState(() => sessionStorage.getItem(ENC_KEY_SESSION) || localStorage.getItem(ENC_KEY_DEVICE) || '');
   const statusNotifyTimers = useRef({});
+  const postMediaCache = useRef(new Map());
+  const postLoadVersion = useRef(0);
 
   const isBackendReady = Boolean(supabase);
   const selectedMood = moods.find((mood) => mood.id === selectedMoodId) || moods[0];
@@ -675,10 +725,11 @@ export default function App() {
   }, [dark, activeTab, selectedMoodId, heat, closeness, panicMode]);
 
   useEffect(() => () => {
-    posts.forEach((post) => {
-      if (String(post.signedUrl || '').startsWith('blob:')) URL.revokeObjectURL(post.signedUrl);
+    postMediaCache.current.forEach((url) => {
+      if (String(url || '').startsWith('blob:')) URL.revokeObjectURL(url);
     });
-  }, [posts]);
+    postMediaCache.current.clear();
+  }, []);
 
   useEffect(() => () => {
     kamaProgress.forEach((item) => {
@@ -692,7 +743,7 @@ export default function App() {
 
   useEffect(() => {
     const tabFromUrl = new URLSearchParams(window.location.search).get('tab');
-    if (tabFromUrl && navItems.some((item) => item.id === tabFromUrl)) {
+    if (tabFromUrl && validTabIds.has(tabFromUrl)) {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -729,6 +780,10 @@ export default function App() {
 
   useEffect(() => {
     if (!couple?.id) return;
+    postMediaCache.current.forEach((url) => {
+      if (String(url || '').startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+    postMediaCache.current.clear();
     loadPosts(couple.id);
     loadKamaProgress(couple.id);
     if (couple.avatar_path) loadCoupleAvatar(couple);
@@ -741,7 +796,16 @@ export default function App() {
 
     const channel = supabase
       .channel(`couple-${couple.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `couple_id=eq.${couple.id}` }, () => loadPosts(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts', filter: `couple_id=eq.${couple.id}` }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          setPosts((current) => current.filter((post) => post.id !== payload.old?.id));
+          return;
+        }
+        if (payload.new?.id) {
+          mergePostRecord(payload.new);
+          hydratePostMedia(payload.new, couple.id, postLoadVersion.current);
+        }
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `couple_id=eq.${couple.id}` }, () => loadChallenges(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kama_progress', filter: `couple_id=eq.${couple.id}` }, () => loadKamaProgress(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_status', filter: `couple_id=eq.${couple.id}` }, () => loadCoupleStatuses(couple.id))
@@ -776,7 +840,7 @@ export default function App() {
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadPosts(activeCouple.id), loadChallenges(activeCouple.id), loadKamaProgress(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id)]);
+        await Promise.all([loadChallenges(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -799,32 +863,113 @@ export default function App() {
     setProfile(data);
   }
 
-  async function loadPosts(coupleId) {
-    const { data, error } = await supabase.from('posts').select('*').eq('couple_id', coupleId).order('created_at', { ascending: false });
-    if (error) return setToast(error.message);
+  function mergePostRecord(nextPost) {
+    if (!nextPost?.id) return;
+    setPosts((current) => {
+      const existing = current.find((post) => post.id === nextPost.id);
+      const merged = existing?.image_path === nextPost.image_path
+        ? { ...existing, ...nextPost }
+        : { ...nextPost, signedUrl: null, locked: Boolean(nextPost.encrypted && !encryptionPassphrase), mediaLoading: Boolean(nextPost.image_path) };
+      return [merged, ...current.filter((post) => post.id !== nextPost.id)]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    });
+  }
 
-    const hydrated = await Promise.all((data || []).map(async (post) => {
-      const rawSignedUrl = post.image_path ? await getSignedUrl(post.image_path) : null;
+  async function hydratePostMedia(post, coupleId, loadVersion) {
+    if (!post?.image_path) return;
+    const cacheKey = `${post.image_path}:${encryptionPassphrase || 'no-key'}`;
+    const cachedUrl = postMediaCache.current.get(cacheKey);
+    if (cachedUrl) {
+      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: cachedUrl, locked: false, mediaLoading: false } : item));
+      return;
+    }
+    if (post.encrypted && !encryptionPassphrase) {
+      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: null, locked: true, mediaLoading: false } : item));
+      return;
+    }
+
+    try {
+      const rawSignedUrl = await getSignedUrl(post.image_path);
       let displayUrl = rawSignedUrl;
-      let locked = false;
-
       if (post.encrypted && rawSignedUrl) {
-        if (!encryptionPassphrase) {
-          displayUrl = null;
-          locked = true;
-        } else {
-          try {
-            displayUrl = await decryptSignedUrlToObjectUrl(rawSignedUrl, coupleId, encryptionPassphrase, post.encryption_iv, post.mime_type);
-          } catch {
-            displayUrl = null;
-            locked = true;
-          }
-        }
+        displayUrl = await decryptSignedUrlToObjectUrl(rawSignedUrl, coupleId, encryptionPassphrase, post.encryption_iv, post.mime_type);
       }
+      if (loadVersion !== postLoadVersion.current) {
+        if (String(displayUrl || '').startsWith('blob:')) URL.revokeObjectURL(displayUrl);
+        return;
+      }
+      if (displayUrl) postMediaCache.current.set(cacheKey, displayUrl);
+      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: displayUrl, locked: !displayUrl, mediaLoading: false } : item));
+    } catch {
+      if (loadVersion !== postLoadVersion.current) return;
+      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: null, locked: true, mediaLoading: false } : item));
+    }
+  }
 
-      return { ...post, signedUrl: displayUrl, locked };
+  async function hydratePostsMedia(sourcePosts, coupleId, loadVersion) {
+    const mediaPosts = sourcePosts.filter((post) => post.image_path);
+    let index = 0;
+    const worker = async () => {
+      while (index < mediaPosts.length && loadVersion === postLoadVersion.current) {
+        const post = mediaPosts[index];
+        index += 1;
+        await hydratePostMedia(post, coupleId, loadVersion);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(MEDIA_CONCURRENCY, mediaPosts.length) }, worker));
+  }
+
+  async function loadPosts(coupleId) {
+    const loadVersion = ++postLoadVersion.current;
+    setPostsLoading(true);
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('couple_id', coupleId)
+      .order('created_at', { ascending: false })
+      .limit(MAX_POSTS);
+    if (loadVersion !== postLoadVersion.current) return;
+    if (error) {
+      setPostsLoading(false);
+      return setToast(error.message);
+    }
+
+    const sourcePosts = (data || []).map((post) => ({
+      ...post,
+      signedUrl: null,
+      locked: Boolean(post.encrypted && !encryptionPassphrase),
+      mediaLoading: Boolean(post.image_path),
     }));
-    setPosts(hydrated);
+    setPosts(sourcePosts);
+    setHasMorePosts(sourcePosts.length === MAX_POSTS);
+    setPostsLoading(false);
+    hydratePostsMedia(sourcePosts, coupleId, loadVersion);
+  }
+
+  async function loadOlderPosts() {
+    if (!couple?.id || postsLoading || !hasMorePosts) return;
+    const oldestPost = posts.at(-1);
+    if (!oldestPost?.created_at) return setHasMorePosts(false);
+    setPostsLoading(true);
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .eq('couple_id', couple.id)
+      .lt('created_at', oldestPost.created_at)
+      .order('created_at', { ascending: false })
+      .limit(MAX_POSTS);
+    setPostsLoading(false);
+    if (error) return setToast(error.message);
+    const olderPosts = (data || []).map((post) => ({
+      ...post,
+      signedUrl: null,
+      locked: Boolean(post.encrypted && !encryptionPassphrase),
+      mediaLoading: Boolean(post.image_path),
+    }));
+    setPosts((current) => [...current, ...olderPosts.filter((post) => !current.some((item) => item.id === post.id))]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+    setHasMorePosts(olderPosts.length === MAX_POSTS);
+    hydratePostsMedia(olderPosts, couple.id, postLoadVersion.current);
   }
 
   async function getCoupleAvatarUrl(activeCouple) {
@@ -1086,13 +1231,14 @@ export default function App() {
   async function addSystemPost(type, text) {
     if (!couple?.id || !session?.user?.id || !text) return;
     try {
-      await supabase.from('posts').insert({
+      const { data, error } = await supabase.from('posts').insert({
         couple_id: couple.id,
         author_id: session.user.id,
         type,
         text,
-      });
-      await loadPosts(couple.id);
+      }).select('*').single();
+      if (error) throw error;
+      mergePostRecord(data);
     } catch (error) {
       console.warn('System post failed:', error.message || error);
     }
@@ -1256,7 +1402,7 @@ export default function App() {
 
     try {
       if (!encryptionPassphrase) { showE2eePrompt('profilová fotka páru'); return; }
-      const uploaded = await uploadToStorage(file, `${couple.id}/profile`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
+      const uploaded = await uploadToStorage(file, `${couple.id}/profile`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase, maxEdge: AVATAR_IMAGE_MAX_EDGE });
       const avatarPath = uploaded.path;
       const { data, error } = await supabase
         .from('couples')
@@ -1283,7 +1429,7 @@ export default function App() {
   async function addPost() {
     if (!couple?.id) return setToast('Nejdřív vytvoř nebo připoj pár.');
     const text = thought.trim() || `Aktuální nálada: ${selectedMood.label}.`;
-    const { error } = await supabase.from('posts').insert({
+    const { data, error } = await supabase.from('posts').insert({
       couple_id: couple.id,
       author_id: session.user.id,
       type: 'mood',
@@ -1291,48 +1437,48 @@ export default function App() {
       mood_label: selectedMood.label,
       heat,
       closeness,
-    });
+    }).select('*').single();
     if (error) return setToast(error.message);
+    mergePostRecord(data);
     setThought('');
-    await loadPosts(couple.id);
     await notifyPartner('thought_added', 'MoodSync', 'Partner/ka ti poslal/a novou myšlenku.');
   }
 
   async function sendMessage(nextText) {
     const cleanText = typeof nextText === 'string' ? nextText.trim() : message.trim();
     if (!couple?.id || !cleanText) return;
-    const { error } = await supabase.from('posts').insert({ couple_id: couple.id, author_id: session.user.id, type: 'chat', text: cleanText });
+    const { data, error } = await supabase.from('posts').insert({ couple_id: couple.id, author_id: session.user.id, type: 'chat', text: cleanText }).select('*').single();
     if (error) return setToast(error.message);
+    mergePostRecord(data);
     setMessage('');
-    await loadPosts(couple.id);
     await notifyPartner('message_added', 'MoodSync', 'Partner/ka ti poslal/a novou zprávu.');
   }
 
 
   async function sendDailyStatus(status) {
     if (!couple?.id || !session?.user?.id || !status?.message) return;
-    const { error } = await supabase.from('posts').insert({
+    const { data, error } = await supabase.from('posts').insert({
       couple_id: couple.id,
       author_id: session.user.id,
       type: 'status',
       text: `${status.icon} ${status.message}`,
-    });
+    }).select('*').single();
     if (error) return setToast(error.message);
-    await loadPosts(couple.id);
+    mergePostRecord(data);
     await notifyPartner('daily_status', 'MoodSync status', `${status.icon} ${status.label}`);
     setToast(`Status odeslán: ${status.label}`);
   }
 
   async function completeEveningRitual(item) {
     if (!couple?.id || !session?.user?.id || !item) return;
-    const { error } = await supabase.from('posts').insert({
+    const { data, error } = await supabase.from('posts').insert({
       couple_id: couple.id,
       author_id: session.user.id,
       type: 'ritual',
       text: `Večerní rituál: ${item.label}`,
-    });
+    }).select('*').single();
     if (error) return setToast(error.message);
-    await loadPosts(couple.id);
+    mergePostRecord(data);
     await notifyPartner('evening_ritual', 'MoodSync rituál', `Partner/ka označil/a krok večerního rituálu: ${item.label}.`);
     setToast(`Rituál označen: ${item.label}`);
   }
@@ -1342,9 +1488,9 @@ export default function App() {
     if (!file) return;
     try {
       if (!encryptionPassphrase) { showE2eePrompt('galerie a feed'); return; }
-      const uploaded = await uploadToStorage(file, `${couple.id}/gallery`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase });
+      const uploaded = await uploadToStorage(file, `${couple.id}/gallery`, { encrypt: true, coupleId: couple.id, passphrase: encryptionPassphrase, maxEdge: GALLERY_IMAGE_MAX_EDGE });
       const imagePath = uploaded.path;
-      const { error } = await supabase.from('posts').insert({
+      const { data, error } = await supabase.from('posts').insert({
         couple_id: couple.id,
         author_id: session.user.id,
         type: 'photo',
@@ -1354,9 +1500,10 @@ export default function App() {
         encrypted: uploaded.encrypted,
         encryption_iv: uploaded.encryptionIv,
         mime_type: uploaded.mimeType,
-      });
+      }).select('*').single();
       if (error) throw error;
-      await loadPosts(couple.id);
+      mergePostRecord(data);
+      hydratePostMedia(data, couple.id, postLoadVersion.current);
       setActiveTab('gallery');
       await notifyPartner('photo_added', 'MoodSync', 'Partner/ka přidal/a novou fotku do galerie.');
     } catch (error) {
@@ -1378,7 +1525,7 @@ export default function App() {
         await supabase.storage.from(STORAGE_BUCKET).remove([post.image_path]);
       }
 
-      await loadPosts(couple.id);
+      setPosts((current) => current.filter((item) => item.id !== post.id));
     } catch (error) {
       setToast(`Mazání se nepodařilo: ${error.message}`);
     }
@@ -1699,6 +1846,7 @@ export default function App() {
     setSession(null);
     setCouple(null);
     setPosts([]);
+    setHasMorePosts(false);
     setChallenges([]);
     setKamaProgress([]);
     setCoupleStatuses([]);
@@ -1707,6 +1855,10 @@ export default function App() {
     setMilestones([]);
     setPartnerDayCompletions([]);
     setSurpriseCard(null);
+    postMediaCache.current.forEach((url) => {
+      if (String(url || '').startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+    postMediaCache.current.clear();
   }
 
   const filteredPosts = useMemo(() => {
@@ -1791,6 +1943,12 @@ export default function App() {
             />
           )}
 
+          {postsLoading && couple && (
+            <div role="status" className="flex items-center gap-2 rounded-2xl bg-white/70 px-4 py-3 text-sm font-bold text-pink-600 shadow-sm dark:bg-white/10 dark:text-pink-200">
+              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-pink-500" /> Načítám poslední zprávy…
+            </div>
+          )}
+
           {activeTab === 'home' && (
             <HomePanel
               profile={profile}
@@ -1808,9 +1966,6 @@ export default function App() {
               thought={thought}
               setThought={setThought}
               addPost={addPost}
-              partnerName={partnerName}
-              setPartnerName={setPartnerName}
-              updateProfileName={updateProfileName}
               activeChallenges={challenges}
               currentUserId={session?.user?.id}
               updateChallenge={updateChallenge}
@@ -1833,10 +1988,11 @@ export default function App() {
           )}
 
           <AppErrorBoundary resetKey={activeTab}>
-            {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} />}
-            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} />}
-            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} />}
+            {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
+            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
+            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
+            {activeTab === 'more' && <MorePanel setActiveTab={setActiveTab} />}
             {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
@@ -2192,7 +2348,7 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
   );
 }
 
-function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, openChallenges, posts = [], challenges = [], wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual }) {
+function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, activeChallenges = [], currentUserId, openChallenges, posts = [], challenges = [], wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual }) {
   const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
   const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
   const partnerMood = freshPartnerStatus?.mood_label ? getMoodByLabel(freshPartnerStatus.mood_label) : latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
@@ -2208,9 +2364,30 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
   const todayKey = getLocalDateKey();
   const partnerDayCompletion = partnerDayCompletions.find((item) => item.user_id === currentUserId && item.completion_date === todayKey) || null;
   const partnerDayAwardedByMe = partnerDayCompletions.find((item) => item.awarded_by === currentUserId && item.completion_date === todayKey) || null;
+  const recentDateKeys = getRecentDateKeys();
+  const recentDayKeys = new Set(posts.map((post) => String(post.created_at || '').slice(0, 10)).filter((dateKey) => recentDateKeys.has(dateKey)));
 
   return (
     <>
+      <Card className="overflow-hidden bg-gradient-to-br from-pink-500 via-fuchsia-500 to-purple-600 text-white">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black backdrop-blur"><Sparkles size={15} /> Dnešní jiskra</div>
+            <h1 className="mt-3 text-3xl font-black">Jeden malý signál stačí.</h1>
+            <p className="mt-2 max-w-xl text-sm text-white/85">Řekni, jak ti je, nebo udělejte jeden krátký rituál. Bez tlaku na výkon.</p>
+          </div>
+          <div className="shrink-0 rounded-3xl bg-white/15 px-5 py-4 text-center backdrop-blur">
+            <div className="text-3xl font-black">{recentDayKeys.size}/7</div>
+            <div className="text-xs font-bold text-white/80">společných dnů</div>
+          </div>
+        </div>
+      </Card>
+
+      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <DailyStatusCard sendDailyStatus={sendDailyStatus} />
+        <EveningRitualCard completeEveningRitual={completeEveningRitual} posts={posts} />
+      </section>
+
       <section className="grid min-w-0 gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <PartnerCard
           name={couple ? 'Partner/ka' : 'Čeká na spárování'}
@@ -2223,7 +2400,13 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
           highlight
         />
         <Card>
-          <h2 className="flex items-center gap-2 text-xl font-black"><Heart className="text-pink-500" /> Moje nastavení</h2>
+          <h2 className="flex items-center gap-2 text-xl font-black"><Heart className="text-pink-500" /> Jak mi právě je</h2>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+            {moods.map((mood) => {
+              const Icon = mood.icon;
+              return <button type="button" aria-label={mood.label} title={mood.label} key={mood.id} onClick={() => setSelectedMoodId(mood.id)} className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-md transition ${mood.color} ${selectedMood.id === mood.id ? 'scale-105 ring-4 ring-pink-200 dark:ring-white/30' : 'opacity-70 hover:opacity-100'}`}><Icon size={22} /></button>;
+            })}
+          </div>
           <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-3">
             <CompactMeter title="Blízkost" value={closeness} setValue={setCloseness} />
             <CompactMeter title="Nadrženost" value={heat} setValue={setHeat} />
@@ -2235,42 +2418,25 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
 
       <ActiveChallengeHomeCard challenge={incomingChallenge} outgoingCount={outgoingCount} openChallenges={openChallenges} />
 
-      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-        <DailyStatusCard sendDailyStatus={sendDailyStatus} />
-        <EveningRitualCard completeEveningRitual={completeEveningRitual} posts={posts} />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <RelationshipScoreCard score={relationshipScore.score} trend={relationshipScore.trend} history={relationshipHistory} />
-        <PartnerDayCard card={partnerDay} awardedByMe={partnerDayAwardedByMe} myAward={partnerDayCompletion} completePartnerDay={completePartnerDay} />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-2">
-        <WishlistHomeCard items={wishlistItems} currentUserId={currentUserId} addWishlistItem={addWishlistItem} completeWishlistItem={completeWishlistItem} />
-        <SurpriseHomeCard surprise={surpriseCard} createSurprise={createSurprise} />
-      </section>
-
-      <MilestonesHomeCard milestones={milestones} addMilestone={addMilestone} />
-
-      <RelationshipOverview ownHeat={ownHeat} ownCloseness={ownCloseness} partnerHeat={partnerHeat} partnerCloseness={partnerCloseness} hasPartnerMood={Boolean(freshPartnerStatus)} />
-
-      <Card>
-        <h2 className="mb-4 flex items-center justify-between text-2xl font-black">Moje aktuální nálada<Bell className="text-pink-500" /></h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {moods.map((mood) => {
-            const Icon = mood.icon;
-            return <button key={mood.id} onClick={() => setSelectedMoodId(mood.id)} className={`rounded-3xl border p-4 text-left shadow-sm transition ${selectedMood.id === mood.id ? 'border-pink-500 bg-pink-50 dark:bg-pink-500/20' : 'border-gray-200 bg-white/70 hover:bg-pink-50 dark:border-white/10 dark:bg-white/5'}`}><div className={`grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br ${mood.color} text-white shadow-md`}><Icon size={22} /></div><div className="mt-3 text-sm font-black">{mood.label}</div></button>;
-          })}
+      <details className="group rounded-[1.5rem] border border-white/70 bg-white/70 shadow-lg backdrop-blur dark:border-white/10 dark:bg-white/[0.06] sm:rounded-[2rem]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-black"><span className="flex items-center gap-2"><Gift className="text-pink-500" /> Inspirace a společná hra</span><span className="text-sm text-pink-500 group-open:hidden">Rozbalit</span><span className="hidden text-sm text-pink-500 group-open:inline">Sbalit</span></summary>
+        <div className="grid gap-4 border-t border-pink-100 p-4 dark:border-white/10 sm:p-5">
+          <PartnerDayCard card={partnerDay} awardedByMe={partnerDayAwardedByMe} myAward={partnerDayCompletion} completePartnerDay={completePartnerDay} />
+          <section className="grid gap-4 lg:grid-cols-2">
+            <WishlistHomeCard items={wishlistItems} currentUserId={currentUserId} addWishlistItem={addWishlistItem} completeWishlistItem={completeWishlistItem} />
+            <SurpriseHomeCard surprise={surpriseCard} createSurprise={createSurprise} />
+          </section>
         </div>
-      </Card>
+      </details>
 
-      <Card>
-        <h3 className="text-xl font-black">Profil</h3>
-        <div className="mt-4 flex gap-3">
-          <TextInput placeholder="Tvoje jméno" value={partnerName} onChange={(event) => setPartnerName(event.target.value)} />
-          <button onClick={() => updateProfileName(partnerName)} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Uložit</button>
+      <details className="group rounded-[1.5rem] border border-white/70 bg-white/70 shadow-lg backdrop-blur dark:border-white/10 dark:bg-white/[0.06] sm:rounded-[2rem]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-black"><span className="flex items-center gap-2"><TrendingUp className="text-purple-500" /> Náš přehled a vzpomínky</span><span className="text-sm text-pink-500 group-open:hidden">Rozbalit</span><span className="hidden text-sm text-pink-500 group-open:inline">Sbalit</span></summary>
+        <div className="grid gap-4 border-t border-pink-100 p-4 dark:border-white/10 sm:p-5">
+          <RelationshipScoreCard score={relationshipScore.score} trend={relationshipScore.trend} history={relationshipHistory} />
+          <MilestonesHomeCard milestones={milestones} addMilestone={addMilestone} />
+          <RelationshipOverview ownHeat={ownHeat} ownCloseness={ownCloseness} partnerHeat={partnerHeat} partnerCloseness={partnerCloseness} hasPartnerMood={Boolean(freshPartnerStatus)} />
         </div>
-      </Card>
+      </details>
     </>
   );
 }
@@ -2638,14 +2804,19 @@ const quickChatMessages = [
   'Děkuju za tebe'
 ];
 
-function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, currentUserId, partnerName }) {
+function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, currentUserId, partnerName, hasMorePosts, loadOlderPosts }) {
   const sortedMessages = [...posts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   const partnerLabel = partnerName?.trim() || 'Partner/ka';
   const messagesEndRef = useRef(null);
+  const latestMessageId = sortedMessages.at(-1)?.id;
+  const previousLatestMessageId = useRef(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [sortedMessages.length]);
+    if (latestMessageId && latestMessageId !== previousLatestMessageId.current) {
+      messagesEndRef.current?.scrollIntoView({ block: 'end' });
+      previousLatestMessageId.current = latestMessageId;
+    }
+  }, [latestMessageId]);
 
   return (
     <Card className="flex h-[calc(100dvh-9.5rem)] min-h-[560px] flex-col overflow-hidden p-0 sm:h-[calc(100dvh-11rem)]">
@@ -2674,6 +2845,7 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, c
       </div>
 
       <div className="flex-1 overflow-y-auto bg-white/35 p-3 dark:bg-white/[0.03] sm:p-4">
+        {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší zprávy" />}
         {sortedMessages.length === 0 ? (
           <div className="flex min-h-full items-end">
             <EmptyState title="Zatím žádný chat" text="Pošli první rychlou zprávu, použij připravenou větu nebo emoji reakci." icon={MessageCircle} />
@@ -2743,11 +2915,11 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, c
   );
 }
 
-function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, openImage, encryptionReady, onMissingE2EE }) {
-  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} openImage={openImage} deletePost={deletePost} /></Card>;
+function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
+  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Deník páru</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Zprávy, nálady a fotky na jednom místě.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} openImage={openImage} deletePost={deletePost} />{hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} />}</Card>;
 }
 
-function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE }) {
+function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
   return (
     <Card>
       <div className="mb-5">
@@ -2787,8 +2959,13 @@ function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCate
         openImage={openImage}
         deletePost={deletePost}
       />
+      {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší fotky" />}
     </Card>
   );
+}
+
+function LoadOlderButton({ onClick, label = 'Načíst starší příspěvky' }) {
+  return <button type="button" onClick={onClick} className="mx-auto my-4 block rounded-full border border-pink-200 bg-white px-5 py-2 text-sm font-black text-pink-600 transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:text-pink-100">{label}</button>;
 }
 
 function GalleryUploadForm({ addPhoto, encryptionReady, onMissingE2EE }) {
@@ -2846,7 +3023,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
         >
           {galleryOnly ? (
             <>
-              <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} compact />
+              <MediaCard imageUrl={post.signedUrl} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} compact />
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -2881,7 +3058,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
               </div>
               <p className="mt-3 text-lg">{post.text}</p>
               {post.mood_label && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nálada: {post.mood_label}</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Blízkost: {post.closeness}%</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nadrženost: {post.heat}%</div></div>}
-              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} />}
+              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} />}
             </>
           )}
         </article>
@@ -2890,7 +3067,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
   );
 }
 
-function MediaCard({ blurred, locked, category, imageUrl, openImage, compact = false }) {
+function MediaCard({ blurred, locked, loading, category, imageUrl, openImage, compact = false }) {
   return (
     <div className={`relative overflow-hidden border border-white/20 bg-gradient-to-br from-rose-500 via-fuchsia-500 to-purple-700 ${compact ? 'h-56 rounded-none md:h-72' : 'mt-4 h-72 rounded-3xl'}`}>
       {imageUrl ? (
@@ -2902,15 +3079,17 @@ function MediaCard({ blurred, locked, category, imageUrl, openImage, compact = f
           <img
             src={imageUrl}
             alt={category}
+            loading="lazy"
+            decoding="async"
             className={`h-full w-full object-cover transition ${blurred ? 'blur-sm scale-105' : 'hover:scale-105'}`}
           />
         </button>
       ) : (
-        <div className="grid h-full place-items-center p-5 text-center text-white">
+        <div className={`grid h-full place-items-center p-5 text-center text-white ${loading ? 'animate-pulse' : ''}`}>
           <div>
-            <Lock className="mx-auto mb-3" size={44} />
-            <div className="font-black">{locked ? 'Šifrovaná fotka' : 'Fotka není dostupná'}</div>
-            <p className="mt-2 text-sm text-white/80">{locked ? 'Zadej správné E2EE heslo v profilu.' : 'Zkus obnovit stránku.'}</p>
+            {loading ? <Image className="mx-auto mb-3" size={44} /> : <Lock className="mx-auto mb-3" size={44} />}
+            <div className="font-black">{loading ? 'Připravuju fotku…' : locked ? 'Šifrovaná fotka' : 'Fotka není dostupná'}</div>
+            {!loading && <p className="mt-2 text-sm text-white/80">{locked ? 'Zadej správné E2EE heslo v profilu.' : 'Zkus obnovit stránku.'}</p>}
           </div>
         </div>
       )}
@@ -3369,7 +3548,37 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
 }
 
 function BottomNav({ activeTab, setActiveTab }) {
-  return <nav aria-label="Hlavní navigace" className="fixed bottom-[calc(.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-7 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/70 sm:flex sm:max-w-3xl sm:justify-around sm:p-3">{navItems.map((item) => { const Icon = item.icon; return <button type="button" aria-current={activeTab === item.id ? 'page' : undefined} aria-label={item.label} key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition sm:px-3 md:px-4 ${activeTab === item.id ? 'bg-pink-500 text-white' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon aria-hidden="true" size={18} /><span className="max-w-full truncate text-[9px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
+  const secondaryActive = secondaryTabs.some((item) => item.id === activeTab);
+  return <nav aria-label="Hlavní navigace" className="fixed bottom-[calc(.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-5 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/70 sm:max-w-2xl sm:p-3">{navItems.map((item) => { const Icon = item.icon; const active = activeTab === item.id || (item.id === 'more' && secondaryActive); return <button type="button" aria-current={active ? 'page' : undefined} aria-label={item.label} key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-2 py-2 transition sm:px-4 ${active ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon aria-hidden="true" size={20} /><span className="max-w-full truncate text-[10px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
+}
+
+function MorePanel({ setActiveTab }) {
+  return (
+    <Card>
+      <div className="mb-5">
+        <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-100"><Sparkles size={15} /> Další společné možnosti</div>
+        <h2 className="mt-3 text-3xl font-black">Co chcete dělat?</h2>
+        <p className="mt-1 text-gray-500 dark:text-gray-300">Méně používané části jsou tady, aby hlavní obrazovka zůstala jednoduchá.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {secondaryTabs.map((item) => {
+          const Icon = item.icon;
+          const descriptions = {
+            feed: 'Nálady, statusy a společné momenty na jednom místě.',
+            kamasutra: 'Soukromá inspirace, oblíbené polohy a společný pokrok.',
+            profile: 'Jména, párování, zabezpečení fotek a nastavení účtu.',
+          };
+          return (
+            <button key={item.id} type="button" onClick={() => setActiveTab(item.id)} className="rounded-3xl border border-pink-100 bg-gradient-to-br from-white to-pink-50 p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:from-white/10 dark:to-pink-500/10">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-pink-500 text-white"><Icon size={23} /></div>
+              <h3 className="mt-4 text-lg font-black">{item.label}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-gray-500 dark:text-gray-300">{descriptions[item.id]}</p>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
 }
 
 function FeatureTile({ icon: Icon, title, text }) {
