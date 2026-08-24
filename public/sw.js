@@ -1,7 +1,7 @@
 const CACHE_VERSION = 'moodsync-sw-v3';
 const DEFAULT_URL = '/';
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 

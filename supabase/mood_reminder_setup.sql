@@ -15,9 +15,9 @@
 --    SUPABASE_URL
 --    SUPABASE_SERVICE_ROLE_KEY
 --
--- Optional secret for scheduled calls:
+-- Required secret for scheduled calls:
 -- npx supabase secrets set MOOD_REMINDER_SECRET="your-long-random-secret"
--- If using it, call the function with header:
+-- Call the function with header:
 -- x-cron-secret: your-long-random-secret
 --
 -- Recommended schedule:

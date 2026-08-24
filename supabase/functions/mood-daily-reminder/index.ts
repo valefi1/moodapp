@@ -80,11 +80,12 @@ async function sendPush(supabase: any, subscriptionRow: any, payload: Record<str
 
 serve(async (req) => {
   try {
+    if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
+
     const expectedSecret = Deno.env.get("MOOD_REMINDER_SECRET");
-    if (expectedSecret) {
-      const suppliedSecret = req.headers.get("x-cron-secret");
-      if (suppliedSecret !== expectedSecret) return jsonResponse({ error: "Unauthorized" }, 401);
-    }
+    if (!expectedSecret) return jsonResponse({ error: "MOOD_REMINDER_SECRET is not configured" }, 500);
+    const suppliedSecret = req.headers.get("x-cron-secret");
+    if (suppliedSecret !== expectedSecret) return jsonResponse({ error: "Unauthorized" }, 401);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -115,14 +116,16 @@ serve(async (req) => {
     let checked = 0;
     let sent = 0;
     let skipped = 0;
-    const perUser = new Map<string, any>();
+    const perUser = new Map<string, any[]>();
 
     for (const sub of subscriptions || []) {
-      // One scheduled notification per user/run is enough; multiple devices still share idempotency log.
-      if (!perUser.has(sub.user_id)) perUser.set(sub.user_id, sub);
+      const userSubscriptions = perUser.get(sub.user_id) || [];
+      userSubscriptions.push(sub);
+      perUser.set(sub.user_id, userSubscriptions);
     }
 
-    for (const sub of perUser.values()) {
+    for (const userSubscriptions of perUser.values()) {
+      const sub = userSubscriptions[0];
       checked += 1;
 
       const { data: status } = await supabase
@@ -204,8 +207,21 @@ serve(async (req) => {
         continue;
       }
 
-      const ok = await sendPush(supabase, sub, candidate.payload, candidate.options);
-      if (ok) sent += 1;
+      const deliveryResults = await Promise.all(
+        userSubscriptions.map((subscription) => sendPush(supabase, subscription, candidate.payload, candidate.options)),
+      );
+      const delivered = deliveryResults.filter(Boolean).length;
+      sent += delivered;
+
+      // A failed delivery must not consume the idempotency reservation forever.
+      if (!delivered) {
+        await supabase
+          .from("push_notification_log")
+          .delete()
+          .eq("user_id", sub.user_id)
+          .eq("event_type", candidate.eventType)
+          .eq("period_key", candidate.periodKey);
+      }
     }
 
     return jsonResponse({ success: true, checked, sent, skipped, uniqueUsers: perUser.size, todayKey });

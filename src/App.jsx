@@ -6,12 +6,9 @@ import {
   CloudRain,
   Frown,
   ZapOff,
-  Award,
   Bell,
   CalendarDays,
-  CheckCircle2,
   Clock,
-  Copy,
   Dice5,
   ExternalLink,
   Flame,
@@ -27,7 +24,6 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
-  Star,
   Sun,
   Trophy,
   Target,
@@ -47,12 +43,13 @@ const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 const ENC_KEY_SESSION = 'moodsync-e2ee-passphrase';
 const ENC_KEY_DEVICE = 'moodsync-e2ee-passphrase-device';
 const STATUS_NOTIFY_DELAY_MS = 1800;
+const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
 
 const moods = [
   { id: 'love', icon: Heart, label: 'Zamilovaný/á', color: 'from-pink-400 to-rose-500', tone: 'positive' },
   { id: 'calm', icon: Sparkles, label: 'V pohodě', color: 'from-sky-300 to-blue-400', tone: 'positive' },
   { id: 'hug', icon: Heart, label: 'Potřebuju obejmout', color: 'from-violet-300 to-purple-500', tone: 'soft' },
-  { id: 'flirt', icon: Flame, label: 'Flirt mood', color: 'from-fuchsia-400 to-pink-600', tone: 'spicy' },
+  { id: 'flirt', icon: Flame, label: 'Mám chuť flirtovat', color: 'from-fuchsia-400 to-pink-600', tone: 'spicy' },
   { id: 'hot', icon: Flame, label: 'Mega nadržený/á', color: 'from-orange-400 to-red-500', tone: 'spicy' },
   { id: 'close', icon: Users, label: 'Chci blízkost', color: 'from-emerald-300 to-teal-500', tone: 'soft' },
   { id: 'sad', icon: CloudRain, label: 'Smutný/á', color: 'from-blue-400 to-slate-600', tone: 'negative' },
@@ -62,6 +59,7 @@ const moods = [
 ];
 
 function getMoodByLabel(label) {
+  if (label === 'Flirt mood') return moods.find((mood) => mood.id === 'flirt');
   return moods.find((mood) => mood.label === label) || moods[0];
 }
 
@@ -72,30 +70,30 @@ function isStatusFresh(status) {
 
 const photoCategories = [
   { id: 'all', label: 'Všechny' },
-  { id: 'boobs', label: 'Boobs' },
-  { id: 'ass', label: 'Ass' },
-  { id: 'dick', label: 'Dick' },
-  { id: 'couple', label: 'Couple' },
-  { id: 'lingerie', label: 'Lingerie' },
-  { id: 'mirror', label: 'Mirror' },
-  { id: 'romantic', label: 'Romantic' },
+  { id: 'boobs', label: 'Prsa' },
+  { id: 'ass', label: 'Zadeček' },
+  { id: 'dick', label: 'Penis' },
+  { id: 'couple', label: 'Společné' },
+  { id: 'lingerie', label: 'Prádlo' },
+  { id: 'mirror', label: 'V zrcadle' },
+  { id: 'romantic', label: 'Romantické' },
 ];
 
 const challengeCategories = [
   { id: 'all', label: 'Vše', color: 'from-pink-400 to-rose-500' },
   { id: 'romantic', label: 'Romantické', color: 'from-pink-400 to-rose-500' },
   { id: 'flirty', label: 'Flirt', color: 'from-fuchsia-400 to-pink-600' },
-  { id: 'spicy', label: 'Spicy', color: 'from-orange-400 to-red-500' },
-  { id: 'deep', label: 'Deep talk', color: 'from-violet-400 to-purple-600' },
-  { id: 'fun', label: 'Fun', color: 'from-sky-400 to-blue-500' },
+  { id: 'spicy', label: 'Odvážné', color: 'from-orange-400 to-red-500' },
+  { id: 'deep', label: 'Hlubší rozhovor', color: 'from-violet-400 to-purple-600' },
+  { id: 'fun', label: 'Zábava', color: 'from-sky-400 to-blue-500' },
 ];
 
 const rewardTiers = [
   { level: 1, title: 'Nový pár', minXp: 0, reward: 'Odemčeno: denní check-in' },
-  { level: 2, title: 'Jiskra', minXp: 50, reward: 'Odemčeno: Flirt badge' },
-  { level: 3, title: 'Chemie', minXp: 120, reward: 'Odemčeno: After Dark výzvy' },
+  { level: 2, title: 'Jiskra', minXp: 50, reward: 'Odemčeno: odznak flirtu' },
+  { level: 3, title: 'Chemie', minXp: 120, reward: 'Odemčeno: odvážnější výzvy' },
   { level: 4, title: 'Magnetismus', minXp: 220, reward: 'Odemčeno: Soukromé rituály' },
-  { level: 5, title: 'Power Couple', minXp: 360, reward: 'Odemčeno: Premium intimacy vault' },
+  { level: 5, title: 'Silný pár', minXp: 360, reward: 'Odemčeno: společný trezor intimity' },
 ];
 
 const partnerDayCards = [
@@ -244,7 +242,7 @@ const starterChallenges = [
   { title: 'Vymysli partnerovi bezpečnou flirtovací výzvu na večer.', category: 'flirty', difficulty: 'Medium', xp: 16 },
 ];
 
-function normalizeStarterChallenge(challenge, coupleId, index = 0, userId = null) {
+function normalizeStarterChallenge(challenge, coupleId) {
   return {
     couple_id: coupleId,
     title: challenge.title,
@@ -311,13 +309,13 @@ const kamaPositions = [
 ];
 
 const navItems = [
-  { id: 'home', label: 'Home', icon: Heart },
+  { id: 'home', label: 'Domů', icon: Heart },
   { id: 'chat', label: 'Chat', icon: Send },
-  { id: 'feed', label: 'Feed', icon: MessageCircle },
-  { id: 'gallery', label: 'Gallery', icon: Image },
-  { id: 'challenges', label: 'Challenges', icon: Flame },
+  { id: 'feed', label: 'Příspěvky', icon: MessageCircle },
+  { id: 'gallery', label: 'Galerie', icon: Image },
+  { id: 'challenges', label: 'Výzvy', icon: Flame },
   { id: 'kamasutra', label: 'Kamasutra', icon: Heart },
-  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'profile', label: 'Profil', icon: User },
 ];
 
 function getInitialActiveTab(fallback = 'home') {
@@ -326,18 +324,9 @@ function getInitialActiveTab(fallback = 'home') {
   return navItems.some((item) => item.id === tabFromUrl) ? tabFromUrl : fallback;
 }
 
-function getNotificationTargetUrl(eventType) {
-  if (typeof window === 'undefined') return '/';
-  const tab = eventType === 'message_added'
-    ? 'chat'
-    : String(eventType || '').includes('challenge')
-      ? 'challenges'
-      : 'home';
-  return `${window.location.origin}?tab=${tab}`;
-}
-
 function createPairCode() {
-  return `LOVE-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  const bytes = crypto.getRandomValues(new Uint8Array(4));
+  return `LOVE-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
 }
 
 function getLocalState() {
@@ -480,7 +469,7 @@ async function getFunctionErrorMessage(error) {
       const payload = await error.context.json();
       return payload?.error || payload?.message || JSON.stringify(payload);
     }
-  } catch (_) {
+  } catch {
     // Supabase FunctionsHttpError může mít body čitelné jen jednou.
   }
 
@@ -570,6 +559,8 @@ function getChallengeStats(challenges, currentUserId, partnerDayCompletions = []
 
 async function uploadToStorage(file, folder, options = {}) {
   if (!supabase || !file) return null;
+  if (!String(file.type || '').startsWith('image/')) throw new Error('Vybraný soubor není podporovaný obrázek.');
+  if (file.size > MAX_IMAGE_SIZE_BYTES) throw new Error('Fotka je příliš velká. Maximální velikost je 15 MB.');
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
   let uploadFile = file;
   let uploadName = safeName;
@@ -628,7 +619,7 @@ function EmptyState({ title, text, icon: Icon = Sparkles }) {
 export default function App() {
   const local = getLocalState();
   const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(supabase));
   const [dark, setDark] = useState(local.dark ?? true);
   const [activeTab, setActiveTab] = useState(getInitialActiveTab(local.activeTab || 'home'));
   const [profile, setProfile] = useState(null);
@@ -658,12 +649,12 @@ export default function App() {
   const [kamaDifficultyFilter, setKamaDifficultyFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('newest');
   const [panicMode, setPanicMode] = useState(local.panicMode ?? true);
-  const [vanishMode, setVanishMode] = useState(local.vanishMode ?? true);
   const [toast, setToast] = useState('');
   const [e2eePrompt, setE2eePrompt] = useState('');
   const [creatingCouple, setCreatingCouple] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [encryptionPassphrase, setEncryptionPassphrase] = useState(() => sessionStorage.getItem(ENC_KEY_SESSION) || localStorage.getItem(ENC_KEY_DEVICE) || '');
   const statusNotifyTimers = useRef({});
 
@@ -678,15 +669,30 @@ export default function App() {
   }
 
   useEffect(() => {
-    saveLocalState({ dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode });
+    saveLocalState({ dark, activeTab, selectedMoodId, heat, closeness, panicMode });
     document.documentElement.classList.toggle('dark', Boolean(dark));
     document.body.classList.toggle('dark', Boolean(dark));
-  }, [dark, activeTab, selectedMoodId, heat, closeness, panicMode, vanishMode]);
+  }, [dark, activeTab, selectedMoodId, heat, closeness, panicMode]);
+
+  useEffect(() => () => {
+    posts.forEach((post) => {
+      if (String(post.signedUrl || '').startsWith('blob:')) URL.revokeObjectURL(post.signedUrl);
+    });
+  }, [posts]);
+
+  useEffect(() => () => {
+    kamaProgress.forEach((item) => {
+      if (String(item.signedUrl || '').startsWith('blob:')) URL.revokeObjectURL(item.signedUrl);
+    });
+  }, [kamaProgress]);
+
+  useEffect(() => () => {
+    if (String(coupleAvatarUrl || '').startsWith('blob:')) URL.revokeObjectURL(coupleAvatarUrl);
+  }, [coupleAvatarUrl]);
 
   useEffect(() => {
     const tabFromUrl = new URLSearchParams(window.location.search).get('tab');
     if (tabFromUrl && navItems.some((item) => item.id === tabFromUrl)) {
-      setActiveTab(tabFromUrl);
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -698,18 +704,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
+    if (!supabase) return;
 
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session || null);
       setLoading(false);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession || null);
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
     });
 
     return () => subscription.subscription.unsubscribe();
@@ -719,6 +723,8 @@ export default function App() {
     if (!session?.user) return;
     loadCloudData();
     checkNotificationState();
+    // Both functions intentionally use the current authenticated session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
   useEffect(() => {
@@ -726,6 +732,8 @@ export default function App() {
     loadPosts(couple.id);
     loadKamaProgress(couple.id);
     if (couple.avatar_path) loadCoupleAvatar(couple);
+    // Media must be rehydrated whenever the active encryption key changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encryptionPassphrase, couple?.id]);
 
   useEffect(() => {
@@ -744,6 +752,8 @@ export default function App() {
       .subscribe();
 
     return () => supabase.removeChannel(channel);
+    // Subscriptions are scoped to the current couple; handlers read fresh app state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [couple?.id]);
 
   async function loadCloudData() {
@@ -1044,11 +1054,9 @@ export default function App() {
       const { data, error } = await supabase.functions.invoke('send-push-notification', {
         body: {
           coupleId: couple.id,
-          senderId: session.user.id,
           eventType,
           title,
           body,
-          url: getNotificationTargetUrl(eventType),
         },
       });
 
@@ -1233,7 +1241,7 @@ export default function App() {
   }
 
   async function seedChallenges(coupleId) {
-    const rows = starterChallenges.map((challenge, index) => normalizeStarterChallenge(challenge, coupleId, index, session?.user?.id));
+    const rows = starterChallenges.map((challenge) => normalizeStarterChallenge(challenge, coupleId));
     const { error } = await supabase.from('challenges').insert(rows);
     if (error && !String(error.message).includes('duplicate')) {
       setToast(`Výzvy se nepodařilo založit: ${error.message}`);
@@ -1395,7 +1403,7 @@ export default function App() {
 
   async function updateChallenge(id, patch) {
     const normalizedPatch = patch.completed ? { ...patch, completed_by: patch.completed_by || session.user.id, completed_confirmed_by: session.user.id } : patch;
-    const { error } = await supabase.from('challenges').update(normalizedPatch).eq('id', id);
+    const { error } = await supabase.from('challenges').update(normalizedPatch).eq('id', id).eq('couple_id', couple.id);
     if (error) return setToast(error.message);
     await loadChallenges(couple.id);
     if (patch.completed) {
@@ -1741,9 +1749,13 @@ export default function App() {
     return <AuthScreen dark={dark} setDark={setDark} />;
   }
 
+  if (passwordRecovery) {
+    return <PasswordRecoveryScreen dark={dark} onComplete={() => setPasswordRecovery(false)} />;
+  }
+
   return (
     <div className={appClass}>
-      <main className="box-border min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-gradient-to-br from-pink-100 via-rose-50 to-purple-100 px-3 py-3 pb-28 text-gray-900 transition dark:from-gray-950 dark:via-purple-950 dark:to-rose-950 dark:text-white sm:px-4 sm:py-4 md:px-8 md:py-8 md:pb-28">
+      <main className="box-border min-h-screen w-screen max-w-[100vw] overflow-x-hidden bg-gradient-to-br from-pink-100 via-rose-50 to-purple-100 px-3 py-3 pb-[calc(7.5rem+env(safe-area-inset-bottom))] text-gray-900 transition dark:from-gray-950 dark:via-purple-950 dark:to-rose-950 dark:text-white sm:px-4 sm:py-4 md:px-8 md:py-8 md:pb-28">
         <div className="mx-auto grid w-full max-w-full min-w-0 gap-4 md:max-w-7xl md:gap-6">
           <CompactHeader
             encryptionReady={encryptionReady}
@@ -1763,7 +1775,7 @@ export default function App() {
           {!couple && <PairingPanel pairCodeInput={pairCodeInput} setPairCodeInput={setPairCodeInput} createCouple={createCouple} joinCouple={joinCouple} creatingCouple={creatingCouple} />}
 
           {toast && (
-            <div className="rounded-2xl border border-pink-200 bg-white p-4 font-bold text-pink-600 shadow-lg dark:border-white/10 dark:bg-white/10 dark:text-pink-200">
+            <div role="status" aria-live="polite" className="rounded-2xl border border-pink-200 bg-white p-4 font-bold text-pink-600 shadow-lg dark:border-white/10 dark:bg-white/10 dark:text-pink-200">
               {toast} <button className="ml-3 underline" onClick={() => setToast('')}>zavřít</button>
             </div>
           )}
@@ -1819,8 +1831,8 @@ export default function App() {
 
           <AppErrorBoundary resetKey={activeTab}>
             {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} />}
-            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} />}
-            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} vanishMode={vanishMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} />}
+            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} />}
+            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
             {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
@@ -1926,7 +1938,8 @@ function AuthScreen({ dark, setDark }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  async function submitAuth() {
+  async function submitAuth(event) {
+    event?.preventDefault();
     setError('');
     setMessage('');
 
@@ -1935,8 +1948,8 @@ function AuthScreen({ dark, setDark }) {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Heslo musí mít alespoň 6 znaků.');
+    if (password.length < 8) {
+      setError('Heslo musí mít alespoň 8 znaků.');
       return;
     }
 
@@ -1966,13 +1979,32 @@ function AuthScreen({ dark, setDark }) {
 
         if (signInError) {
           if (String(signInError.message).toLowerCase().includes('invalid login credentials')) {
-            throw new Error('Neplatné přihlášení. Pokud jsi účet ještě nevytvořil/a přes záložku Registrovat, nejdřív ho vytvoř. Pokud už účet existuje z magic linku, smaž ho v Supabase Authentication → Users a zaregistruj ho znovu s heslem, nebo nastav nové heslo.');
+            throw new Error('E-mail nebo heslo nesouhlasí. Zkontroluj údaje, případně si nech poslat odkaz pro nastavení nového hesla.');
           }
           throw signInError;
         }
       }
     } catch (authError) {
       setError(authError.message);
+    } finally {
+      setLoadingAuth(false);
+    }
+  }
+
+  async function requestPasswordReset() {
+    setError('');
+    setMessage('');
+    if (!email.trim()) return setError('Nejdřív vyplň svůj e-mail.');
+
+    setLoadingAuth(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+      if (resetError) throw resetError;
+      setMessage('Odkaz pro nastavení nového hesla je na cestě. Zkontroluj i složku Spam.');
+    } catch (resetError) {
+      setError(resetError.message);
     } finally {
       setLoadingAuth(false);
     }
@@ -1985,14 +2017,14 @@ function AuthScreen({ dark, setDark }) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">
-                <Lock size={16} /> Secure couple login
+                <Lock size={16} /> Soukromý prostor pro dva
               </div>
               <h1 className="mt-4 text-5xl font-black">MoodSync</h1>
               <p className="mt-3 text-gray-500 dark:text-gray-300">
-                Přihlašování přes email a heslo. Bez magic linků, takže nenarážíš na limit emailů.
+                Nálady, zprávy a společné chvíle bezpečně na jednom místě.
               </p>
             </div>
-            <button className="rounded-2xl bg-gray-900 p-3 text-white dark:bg-white dark:text-gray-900" onClick={() => setDark(!dark)}>
+            <button type="button" aria-label={dark ? 'Zapnout světlý režim' : 'Zapnout tmavý režim'} className="rounded-2xl bg-gray-900 p-3 text-white dark:bg-white dark:text-gray-900" onClick={() => setDark(!dark)}>
               {dark ? <Sun /> : <Moon />}
             </button>
           </div>
@@ -2014,10 +2046,12 @@ function AuthScreen({ dark, setDark }) {
             </button>
           </div>
 
-          <div className="mt-6 grid gap-3">
+          <form className="mt-6 grid gap-3" onSubmit={submitAuth}>
             {mode === 'register' && (
               <TextInput
                 placeholder="Tvoje jméno"
+                aria-label="Tvoje jméno"
+                autoComplete="name"
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
               />
@@ -2026,6 +2060,9 @@ function AuthScreen({ dark, setDark }) {
             <TextInput
               type="email"
               placeholder="tvuj@email.cz"
+              aria-label="E-mail"
+              autoComplete="email"
+              required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
@@ -2033,27 +2070,71 @@ function AuthScreen({ dark, setDark }) {
             <TextInput
               type="password"
               placeholder="Heslo"
+              aria-label="Heslo"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              minLength={8}
+              required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && submitAuth()}
             />
 
             <button
-              type="button"
-              onClick={submitAuth}
+              type="submit"
               disabled={loadingAuth}
               className="rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loadingAuth ? 'Pracuju...' : mode === 'login' ? 'Přihlásit se' : 'Vytvořit účet'}
             </button>
-          </div>
+            {mode === 'login' && (
+              <button type="button" disabled={loadingAuth} onClick={requestPasswordReset} className="justify-self-center rounded-xl px-3 py-2 text-sm font-bold text-pink-600 underline-offset-4 hover:underline dark:text-pink-200">
+                Zapomenuté heslo
+              </button>
+            )}
+          </form>
 
-          {message && <p className="mt-4 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{message}</p>}
-          {error && <p className="mt-4 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</p>}
+          {message && <p role="status" className="mt-4 rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{message}</p>}
+          {error && <p role="alert" className="mt-4 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</p>}
 
           <p className="mt-5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            Tip: pokud jsi dřív používal magic link, starý uživatel nemusí mít nastavené heslo. Nejčistší testovací postup je smazat uživatele v Supabase Authentication → Users a vytvořit ho znovu přes Registrovat.
+            Tvoje přihlášení spravuje Supabase. Nikdy nikomu neposílej heslo ani společné E2EE heslo k fotkám.
           </p>
+        </Card>
+      </main>
+    </div>
+  );
+}
+
+function PasswordRecoveryScreen({ dark, onComplete }) {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function updatePassword(event) {
+    event.preventDefault();
+    setError('');
+    if (password.length < 8) return setError('Nové heslo musí mít alespoň 8 znaků.');
+    if (password !== confirmPassword) return setError('Zadaná hesla se neshodují.');
+    setSaving(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setSaving(false);
+    if (updateError) return setError(updateError.message);
+    onComplete();
+  }
+
+  return (
+    <div className={dark ? 'dark' : ''}>
+      <main className="grid min-h-screen place-items-center bg-gradient-to-br from-pink-100 via-rose-50 to-purple-100 p-6 text-gray-900 dark:from-gray-950 dark:via-purple-950 dark:to-rose-950 dark:text-white">
+        <Card className="w-full max-w-lg">
+          <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Lock size={16} /> Obnova přístupu</div>
+          <h1 className="mt-4 text-4xl font-black">Nastav nové heslo</h1>
+          <p className="mt-2 text-gray-500 dark:text-gray-300">Použij alespoň osm znaků a heslo, které nepoužíváš jinde.</p>
+          <form onSubmit={updatePassword} className="mt-6 grid gap-3">
+            <TextInput type="password" aria-label="Nové heslo" autoComplete="new-password" minLength={8} required placeholder="Nové heslo" value={password} onChange={(event) => setPassword(event.target.value)} />
+            <TextInput type="password" aria-label="Nové heslo znovu" autoComplete="new-password" minLength={8} required placeholder="Nové heslo znovu" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+            <button type="submit" disabled={saving} className="rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600 disabled:opacity-60">{saving ? 'Ukládám...' : 'Uložit nové heslo'}</button>
+          </form>
+          {error && <p role="alert" className="mt-4 rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</p>}
         </Card>
       </main>
     </div>
@@ -2074,12 +2155,12 @@ function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark
           </div>
         </div>
         <div className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-2">
-          <span className={`rounded-xl px-2 py-2 text-[11px] font-black sm:rounded-2xl sm:px-3 sm:text-xs ${encryptionReady ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-gray-900'}`}>{encryptionReady ? 'E2EE' : 'No key'}</span>
-          <button onClick={() => setPanicMode(!panicMode)} className="rounded-xl bg-gray-900 px-2 py-2 text-[11px] font-black text-white dark:bg-white dark:text-gray-900 sm:rounded-2xl sm:px-3 sm:text-xs">{panicMode ? 'Blur' : 'Open'}</button>
-          <button onClick={enablePushNotifications} className={`rounded-xl px-2 py-2 text-[11px] font-black sm:rounded-2xl sm:px-3 sm:text-xs ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{notificationsEnabled ? 'Notif ON' : 'Notif'}</button>
-          {notificationsEnabled && <button onClick={testPushNotification} className="rounded-xl bg-violet-500 px-2 py-2 text-[11px] font-black text-white sm:rounded-2xl sm:px-3 sm:text-xs">Test</button>}
-          <button onClick={() => setDark(!dark)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 sm:h-10 sm:w-10 sm:rounded-2xl">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
-          <button onClick={signOut} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gray-200 dark:border-white/10 sm:h-10 sm:w-10 sm:rounded-2xl"><LogOut size={18} /></button>
+          <span aria-label={encryptionReady ? 'Šifrování fotek je aktivní' : 'Chybí heslo pro šifrování fotek'} title={encryptionReady ? 'Šifrování fotek je aktivní' : 'Chybí heslo pro šifrování fotek'} className={`flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-[11px] font-black sm:h-auto sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs ${encryptionReady ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-gray-900'}`}><Lock size={15} /><span className="hidden sm:inline">{encryptionReady ? 'E2EE' : 'Bez klíče'}</span></span>
+          <button type="button" aria-label={panicMode ? 'Ukázat soukromé fotky' : 'Rozmazat soukromé fotky'} aria-pressed={panicMode} title="Rozmazání soukromých fotek" onClick={() => setPanicMode(!panicMode)} className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-gray-900 px-2 text-[11px] font-black text-white dark:bg-white dark:text-gray-900 sm:h-auto sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs"><Image size={15} /><span className="hidden sm:inline">{panicMode ? 'Skrýt' : 'Ukázat'}</span></button>
+          <button type="button" aria-label={notificationsEnabled ? 'Oznámení jsou zapnutá' : 'Zapnout oznámení'} title="Nastavení oznámení" onClick={enablePushNotifications} className={`flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-[11px] font-black sm:h-auto sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}><Bell size={15} /><span className="hidden sm:inline">{notificationsEnabled ? 'Zapnuto' : 'Oznámení'}</span></button>
+          {notificationsEnabled && <button type="button" title="Otestovat oznámení" onClick={testPushNotification} className="hidden rounded-xl bg-violet-500 px-2 py-2 text-[11px] font-black text-white sm:block sm:rounded-2xl sm:px-3 sm:text-xs">Test</button>}
+          <button type="button" aria-label={dark ? 'Zapnout světlý režim' : 'Zapnout tmavý režim'} onClick={() => setDark(!dark)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 sm:h-10 sm:w-10 sm:rounded-2xl">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
+          <button type="button" aria-label="Odhlásit se" onClick={signOut} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gray-200 dark:border-white/10 sm:h-10 sm:w-10 sm:rounded-2xl"><LogOut size={18} /></button>
         </div>
       </div>
     </header>
@@ -2099,7 +2180,7 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
             {creatingCouple ? 'Vytvářím pár...' : 'Vytvořit nový pár a kód'}
           </button>
           <div className="flex gap-3">
-            <TextInput placeholder="LOVE-ABCD" value={pairCodeInput} onChange={(event) => setPairCodeInput(event.target.value)} />
+            <TextInput aria-label="Párovací kód" autoCapitalize="characters" placeholder="LOVE-12AB34CD" value={pairCodeInput} onChange={(event) => setPairCodeInput(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && joinCouple()} />
             <button onClick={joinCouple} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Připojit</button>
           </div>
         </div>
@@ -2108,10 +2189,9 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
   );
 }
 
-function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, updateChallenge, openChallenges, posts = [], challenges = [], challengeStats = {}, wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual }) {
+function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, partnerName, setPartnerName, updateProfileName, activeChallenges = [], currentUserId, openChallenges, posts = [], challenges = [], wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual }) {
   const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
   const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
-  const ownMood = freshOwnStatus?.mood_label ? getMoodByLabel(freshOwnStatus.mood_label) : latestOwnMoodPost ? getMoodByLabel(latestOwnMoodPost.mood_label) : selectedMood;
   const partnerMood = freshPartnerStatus?.mood_label ? getMoodByLabel(freshPartnerStatus.mood_label) : latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
   const ownHeat = freshOwnStatus?.heat ?? heat;
   const ownCloseness = freshOwnStatus?.closeness ?? closeness;
@@ -2150,7 +2230,7 @@ function HomePanel({ profile, couple, latestOwnMoodPost, latestPartnerMoodPost, 
         </Card>
       </section>
 
-      <ActiveChallengeHomeCard challenge={incomingChallenge} outgoingCount={outgoingCount} updateChallenge={updateChallenge} openChallenges={openChallenges} />
+      <ActiveChallengeHomeCard challenge={incomingChallenge} outgoingCount={outgoingCount} openChallenges={openChallenges} />
 
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <DailyStatusCard sendDailyStatus={sendDailyStatus} />
@@ -2437,7 +2517,7 @@ function daysUntil(dateString) {
 }
 
 
-function ActiveChallengeHomeCard({ challenge, outgoingCount, updateChallenge, openChallenges }) {
+function ActiveChallengeHomeCard({ challenge, outgoingCount, openChallenges }) {
   if (!challenge && !outgoingCount) return null;
 
   return (
@@ -2539,10 +2619,6 @@ function MiniBar({ label, value }) {
 function PartnerCard({ name, status, mood, heat, closeness, note, waiting, highlight = false }) {
   const Icon = mood?.icon || User;
   return <Card className={highlight ? 'border-pink-300 dark:border-pink-500/30' : ''}><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-lg">{waiting ? <User size={28} /> : <Icon size={28} />}</div><div><h3 className="text-xl font-black">{name}</h3><p className="text-sm text-gray-500 dark:text-gray-300">{status}</p></div></div>{waiting ? <Lock className="text-gray-400" /> : <Icon className="text-pink-500" />}</div><p className="mt-5 rounded-2xl bg-pink-50 p-4 text-gray-700 dark:bg-white/10 dark:text-gray-200">{note}</p><div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-3"><StatBar label="Blízkost" value={waiting ? 0 : closeness} icon={<Heart size={16} />} /><StatBar label="Nadrženost" value={waiting ? 0 : heat} icon={<Flame size={16} />} /></div></Card>;
-}
-
-function Meter({ title, value, setValue, low, high }) {
-  return <div className="mt-5 rounded-[2rem] bg-gradient-to-br from-pink-400 via-rose-500 to-purple-600 p-6 text-center text-white shadow-xl"><div className="text-sm font-bold uppercase tracking-wide text-white/80">{title}</div><div className="text-6xl font-black">{value}%</div><input value={value} onChange={(event) => setValue(Number(event.target.value))} type="range" min="0" max="100" className="mt-6 w-full accent-white" /><div className="mt-2 flex justify-between text-xs text-white/80"><span>{low}</span><span>{high}</span></div></div>;
 }
 
 function StatBar({ label, value, icon }) {
@@ -2664,15 +2740,15 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, c
   );
 }
 
-function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, vanishMode, openImage, encryptionReady, onMissingE2EE }) {
-  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} vanishMode={vanishMode} openImage={openImage} deletePost={deletePost} /></Card>;
+function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, openImage, encryptionReady, onMissingE2EE }) {
+  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Feed</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Realtime zprávy, nálady a fotky páru.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} openImage={openImage} deletePost={deletePost} /></Card>;
 }
 
-function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, vanishMode, openImage, encryptionReady, onMissingE2EE }) {
+function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE }) {
   return (
     <Card>
       <div className="mb-5">
-        <h2 className="text-3xl font-black">Private Gallery</h2>
+        <h2 className="text-3xl font-black">Soukromá galerie</h2>
         <p className="mt-1 text-gray-500 dark:text-gray-300">
           Fotky jsou uložené v privátním Supabase Storage bucketu a cesty jsou oddělené podle ID vašeho páru.
         </p>
@@ -2704,7 +2780,6 @@ function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCate
       <FeedList
         posts={posts}
         panicMode={panicMode}
-        vanishMode={vanishMode}
         galleryOnly
         openImage={openImage}
         deletePost={deletePost}
@@ -2757,7 +2832,7 @@ function PhotoUploadButton({ addPhoto, encryptionReady, onMissingE2EE }) {
   );
 }
 
-function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage, deletePost }) {
+function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost }) {
   if (posts.length === 0) return <EmptyState title="Zatím tu nic není" text={galleryOnly ? 'Nahrajte první společnou fotku.' : 'Pošlete první zprávu, náladu nebo fotku.'} icon={galleryOnly ? Image : MessageCircle} />;
   return (
     <div className={galleryOnly ? 'grid max-h-[760px] grid-cols-2 gap-2 overflow-auto pr-1 sm:gap-4' : 'max-h-[650px] space-y-4 overflow-auto pr-1'}>
@@ -2768,11 +2843,11 @@ function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage
         >
           {galleryOnly ? (
             <>
-              <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} compact />
+              <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} compact />
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-black">{post.photo_category || 'photo'}</div>
+                    <div className="text-sm font-black">{photoCategories.find((category) => category.id === post.photo_category)?.label || 'Fotka'}</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
                   </div>
                   <button
@@ -2803,7 +2878,7 @@ function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage
               </div>
               <p className="mt-3 text-lg">{post.text}</p>
               {post.mood_label && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nálada: {post.mood_label}</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Blízkost: {post.closeness}%</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nadrženost: {post.heat}%</div></div>}
-              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} expiresIn={vanishMode ? '24 h' : 'saved'} category={post.photo_category || 'photo'} openImage={openImage} />}
+              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} locked={post.locked} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} />}
             </>
           )}
         </article>
@@ -2812,7 +2887,7 @@ function FeedList({ posts, panicMode, vanishMode, galleryOnly = false, openImage
   );
 }
 
-function MediaCard({ blurred, locked, expiresIn, category, imageUrl, openImage, compact = false }) {
+function MediaCard({ blurred, locked, category, imageUrl, openImage, compact = false }) {
   return (
     <div className={`relative overflow-hidden border border-white/20 bg-gradient-to-br from-rose-500 via-fuchsia-500 to-purple-700 ${compact ? 'h-56 rounded-none md:h-72' : 'mt-4 h-72 rounded-3xl'}`}>
       {imageUrl ? (
@@ -2837,8 +2912,8 @@ function MediaCard({ blurred, locked, expiresIn, category, imageUrl, openImage, 
         </div>
       )}
       <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-        <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">Couple protected</span>
-        <span className="rounded-full bg-pink-500 px-3 py-1 text-xs font-bold text-white">{expiresIn}</span>
+        <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">Soukromá fotka</span>
+        <span className="rounded-full bg-pink-500 px-3 py-1 text-xs font-bold text-white">uloženo</span>
         <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white backdrop-blur">{category}</span>
       </div>
       {!blurred && imageUrl && (
@@ -3039,7 +3114,7 @@ function ChallengeEditor({ addChallenge }) {
         <select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">
           {challengeCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
-        <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option>Easy</option><option>Medium</option><option>Hard</option></select>
+        <select aria-label="Obtížnost výzvy" value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white"><option value="Easy">Lehká</option><option value="Medium">Střední</option><option value="Hard">Náročná</option></select>
         <TextInput type="number" min="1" max="100" value={xp} onChange={(event) => setXp(Number(event.target.value))} />
         <button onClick={submit} className="rounded-2xl bg-purple-500 px-5 py-3 font-black text-white hover:bg-purple-600">Přidat</button>
       </div>
@@ -3221,10 +3296,6 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
   const [draftPassphrase, setDraftPassphrase] = useState(encryptionPassphrase || '');
   const [rememberOnDevice, setRememberOnDevice] = useState(() => Boolean(localStorage.getItem(ENC_KEY_DEVICE)));
 
-  useEffect(() => {
-    setDraftPassphrase(encryptionPassphrase || '');
-  }, [encryptionPassphrase]);
-
   function activatePassphrase() {
     saveEncryptionPassphrase(draftPassphrase, rememberOnDevice);
   }
@@ -3284,8 +3355,8 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             <FeatureTile icon={ShieldCheck} title="E2EE fotky" text="Fotky se šifrují AES-GCM v prohlížeči ještě před uploadem." />
-            <FeatureTile icon={Users} title="Pairing" text="Párovací kód připojí druhý účet do stejného páru." />
-            <FeatureTile icon={Wand2} title="Realtime" text="Zprávy, fotky, výzvy a progress se synchronizují přes Supabase Realtime." />
+            <FeatureTile icon={Users} title="Propojení páru" text="Párovací kód připojí druhý účet do stejného páru." />
+            <FeatureTile icon={Wand2} title="Živá synchronizace" text="Zprávy, fotky, výzvy a pokrok se synchronizují přes Supabase Realtime." />
           </div>
           <button onClick={signOut} className="mt-6 rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Odhlásit</button>
         </div>
@@ -3295,11 +3366,7 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
 }
 
 function BottomNav({ activeTab, setActiveTab }) {
-  return <nav className="fixed bottom-3 left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-7 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/50 sm:flex sm:max-w-3xl sm:justify-around sm:p-3">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition sm:px-3 md:px-4 ${activeTab === item.id ? 'bg-pink-500 text-white' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon size={18} /><span className="max-w-full truncate text-[9px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
-}
-
-function InfoTile({ title, value, icon }) {
-  return <div className="rounded-3xl border border-white/70 bg-white/70 p-5 dark:border-white/10 dark:bg-white/10"><p className="text-sm text-gray-500 dark:text-gray-300">{title}</p><p className="mt-2 flex items-center gap-2 text-2xl font-black">{icon}{value}</p></div>;
+  return <nav aria-label="Hlavní navigace" className="fixed bottom-[calc(.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-7 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/70 sm:flex sm:max-w-3xl sm:justify-around sm:p-3">{navItems.map((item) => { const Icon = item.icon; return <button type="button" aria-current={activeTab === item.id ? 'page' : undefined} aria-label={item.label} key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 transition sm:px-3 md:px-4 ${activeTab === item.id ? 'bg-pink-500 text-white' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon aria-hidden="true" size={18} /><span className="max-w-full truncate text-[9px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
 }
 
 function FeatureTile({ icon: Icon, title, text }) {
