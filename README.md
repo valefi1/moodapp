@@ -42,13 +42,10 @@ VAPID_PUBLIC_KEY=...
 VAPID_PRIVATE_KEY=...
 VAPID_SUBJECT=mailto:tvoje@email.cz
 SUPABASE_SERVICE_ROLE_KEY=...
-```
-
-Volitelně pro cron připomínky:
-
-```text
 MOOD_REMINDER_SECRET=...
 ```
+
+`MOOD_REMINDER_SECRET` je povinný. Naplánované volání musí stejnou hodnotu poslat v hlavičce `x-cron-secret`; bez ní funkce požadavek odmítne. `SUPABASE_ANON_KEY` a `SUPABASE_URL` poskytuje hostované prostředí Supabase automaticky.
 
 Pozor: `VAPID_SUBJECT` musí být URL, typicky `mailto:...`, ne jen samotný e-mail.
 
@@ -119,7 +116,7 @@ Soubor:
 supabase/functions/send-push-notification/index.ts
 ```
 
-Používá se pro push notifikace partnerovi. U chatových notifikací používá vyšší urgency a kratší TTL.
+Používá se pro push notifikace partnerovi. U chatových notifikací používá vyšší urgency a kratší TTL. Funkce ověřuje JWT přihlášeného uživatele, členství v páru a nepřijímá identitu odesílatele ani cílovou URL pouze na základě dat z prohlížeče.
 
 Deploy přes Supabase Dashboard:
 
@@ -147,6 +144,12 @@ Doporučený schedule v Supabase Cron:
 
 ```text
 0 18 * * *
+```
+
+Požadavek musí být `POST` a obsahovat hlavičku:
+
+```text
+x-cron-secret: hodnota_MOOD_REMINDER_SECRET
 ```
 
 V létě je to přibližně 20:00 Europe/Prague, protože Supabase Cron běží typicky v UTC.

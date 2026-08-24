@@ -24,27 +24,41 @@ serve(async (req) => {
   }
 
   try {
+    if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
+
     const {
       coupleId,
-      senderId,
+      senderId: claimedSenderId,
       eventType = "moodsync_event",
       title = "MoodSync",
       body = "Máš nové upozornění.",
-      url = "/",
     } = await req.json();
 
-    if (!coupleId || !senderId) {
-      return jsonResponse({ error: "Missing coupleId or senderId" }, 400);
-    }
+    if (!coupleId) return jsonResponse({ error: "Missing coupleId" }, 400);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
     const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:admin@example.com";
 
-    if (!supabaseUrl || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey) {
+    if (!supabaseUrl || !serviceRoleKey || !anonKey || !vapidPublicKey || !vapidPrivateKey) {
       return jsonResponse({ error: "Missing Supabase or VAPID secrets" }, 500);
+    }
+
+    const authorization = req.headers.get("authorization");
+    if (!authorization?.toLowerCase().startsWith("bearer ")) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
+    }
+
+    const token = authorization.slice(7).trim();
+    const authClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
+    const { data: authData, error: authError } = await authClient.auth.getUser(token);
+    const senderId = authData.user?.id;
+    if (authError || !senderId) return jsonResponse({ error: "Unauthorized" }, 401);
+    if (claimedSenderId && claimedSenderId !== senderId) {
+      return jsonResponse({ error: "Sender identity mismatch" }, 403);
     }
 
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
@@ -67,6 +81,15 @@ serve(async (req) => {
       return jsonResponse({ error: "Sender is not a member of this couple" }, 403);
     }
 
+    const safeEventType = String(eventType).slice(0, 80);
+    const safeTitle = String(title).slice(0, 80);
+    const safeBody = String(body).slice(0, 280);
+    const targetUrl = safeEventType === "message_added"
+      ? "/?tab=chat"
+      : safeEventType.includes("challenge") || safeEventType.includes("debt")
+        ? "/?tab=challenges"
+        : "/?tab=home";
+
     const { data: subscriptions, error } = await supabase
       .from("push_subscriptions")
       .select("id,user_id,endpoint,subscription")
@@ -76,10 +99,10 @@ serve(async (req) => {
     if (error) throw error;
 
     const payload = JSON.stringify({
-      title,
-      body,
-      url,
-      tag: eventType,
+      title: safeTitle,
+      body: safeBody,
+      url: targetUrl,
+      tag: safeEventType,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
       timestamp: Date.now(),
@@ -89,10 +112,10 @@ serve(async (req) => {
       (subscriptions || []).map(async (item) => {
         try {
           await webpush.sendNotification(item.subscription, payload, {
-            TTL: eventType === "message_added" ? 60 * 60 : 60 * 60 * 24,
-            urgency: eventType === "message_added" ? "high" : "normal",
+            TTL: safeEventType === "message_added" ? 60 * 60 : 60 * 60 * 24,
+            urgency: safeEventType === "message_added" ? "high" : "normal",
           });
-          return { id: item.id, endpoint: item.endpoint, ok: true };
+          return { ok: true };
         } catch (err) {
           const statusCode = err?.statusCode || err?.status;
           if (statusCode === 404 || statusCode === 410) {
@@ -106,14 +129,14 @@ serve(async (req) => {
             message: err?.message || String(err),
           });
 
-          return { id: item.id, endpoint: item.endpoint, ok: false, statusCode, message: err?.message || String(err) };
+          return { ok: false, statusCode };
         }
       }),
     );
 
     const settled = results.map((result) => result.status === "fulfilled" ? result.value : {
       ok: false,
-      message: result.reason?.message || String(result.reason),
+      message: "Push delivery failed",
     });
     const delivered = settled.filter((result) => result.ok).length;
 
