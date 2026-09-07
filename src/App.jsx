@@ -3705,10 +3705,9 @@ function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePo
 }
 
 function GalleryPanel({ posts, dailyMoments = [], currentUserId, saveRating, deleteMoment, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
-  const mirroredMomentIds = new Set(posts.map((post) => post.daily_moment_id).filter(Boolean));
-  const unmirroredMoments = (photoCategory === 'all' || photoCategory === 'moments')
-    ? dailyMoments.filter((moment) => !mirroredMomentIds.has(moment.id))
-    : [];
+  const showMoments = photoCategory === 'all' || photoCategory === 'moments';
+  const visiblePosts = showMoments ? posts.filter((post) => !post.daily_moment_id) : posts;
+  const galleryMoments = showMoments ? dailyMoments : [];
   return (
     <Card>
       <div className="mb-5">
@@ -3741,7 +3740,7 @@ function GalleryPanel({ posts, dailyMoments = [], currentUserId, saveRating, del
 
       <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} />
       <GalleryUploadForm addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} />
-      {unmirroredMoments.length > 0 && (
+      {galleryMoments.length > 0 && (
         <section className="mb-6 rounded-3xl border border-fuchsia-200 bg-fuchsia-50/70 p-4 dark:border-fuchsia-400/20 dark:bg-fuchsia-500/10">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -3751,13 +3750,13 @@ function GalleryPanel({ posts, dailyMoments = [], currentUserId, saveRating, del
             <Heart className="shrink-0 text-pink-500" fill="currentColor" />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            {unmirroredMoments.map((moment) => (
-              <DailyMomentCard key={`gallery-moment-${moment.id}`} label={moment.author_id === currentUserId ? 'Tvůj dnešní moment' : 'Moment partnera/partnerky'} moment={moment} otherMoment={unmirroredMoments.find((item) => item.id !== moment.id)} own={moment.author_id === currentUserId} currentUserId={currentUserId} deleteMoment={deleteMoment} saveRating={saveRating} />
+            {galleryMoments.map((moment) => (
+              <DailyMomentCard key={`gallery-moment-${moment.id}`} label={moment.author_id === currentUserId ? 'Tvůj dnešní moment' : 'Moment partnera/partnerky'} moment={moment} otherMoment={galleryMoments.find((item) => item.id !== moment.id)} own={moment.author_id === currentUserId} currentUserId={currentUserId} deleteMoment={deleteMoment} saveRating={saveRating} />
             ))}
           </div>
         </section>
       )}
-      {(posts.length > 0 || unmirroredMoments.length === 0) && <FeedList posts={posts} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
+      {(visiblePosts.length > 0 || galleryMoments.length === 0) && <FeedList posts={visiblePosts} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
       {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší fotky" />}
     </Card>
   );
