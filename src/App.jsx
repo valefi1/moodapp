@@ -4213,7 +4213,7 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {typeFilters.map((filter) => <PillButton key={filter} active={kamaFilter === filter} onClick={() => setKamaFilter(filter)}>{filter === 'all' ? 'Vše' : filter}</PillButton>)}
           {difficultyFilters.map((filter) => <PillButton key={filter} active={kamaDifficultyFilter === filter} onClick={() => setKamaDifficultyFilter(filter)}>{filter === 'all' ? 'Všechny úrovně' : filter}</PillButton>)}
-          <button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-4 py-2 text-sm font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button>
+          <button onClick={() => setOralOnly(!oralOnly)} className={`rounded-2xl px-3 py-1.5 text-xs font-black transition ${oralOnly ? 'bg-fuchsia-500 text-white' : 'border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-white/10'}`}>Pouze orální</button>
         </div>
       </Card>
 
