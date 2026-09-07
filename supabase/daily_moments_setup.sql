@@ -1,6 +1,12 @@
 -- MoodSync: Dnešní moment
 -- Run this file in the Supabase SQL Editor before enabling the feature in the app.
 
+-- The gallery mirror uses the existing posts table and remains safe to rerun.
+alter table public.posts
+  add column if not exists media_kind text,
+  add column if not exists media_mime_type text,
+  add column if not exists daily_moment_id uuid;
+
 create table if not exists public.daily_moments (
   id uuid primary key default gen_random_uuid(),
   couple_id uuid not null references public.couples(id) on delete cascade,
@@ -12,6 +18,8 @@ create table if not exists public.daily_moments (
   video_path text,
   video_mime_type text,
   duration_seconds numeric,
+  encrypted boolean not null default false,
+  encryption_iv text,
   caption text,
   created_at timestamptz default now(),
   unique (couple_id, author_id, moment_date),
@@ -27,7 +35,9 @@ alter table public.daily_moments
   add column if not exists media_kind text,
   add column if not exists media_mime_type text,
   add column if not exists video_path text,
-  add column if not exists video_mime_type text;
+  add column if not exists video_mime_type text,
+  add column if not exists encrypted boolean not null default false,
+  add column if not exists encryption_iv text;
 
 alter table public.daily_moments
   alter column video_path drop not null,
@@ -106,6 +116,10 @@ create index if not exists daily_moment_ratings_moment_idx
 
 create index if not exists daily_moment_ratings_rater_idx
   on public.daily_moment_ratings (rater_id);
+
+create index if not exists posts_daily_moment_idx
+  on public.posts (daily_moment_id)
+  where daily_moment_id is not null;
 
 alter table public.daily_moments enable row level security;
 alter table public.daily_moment_ratings enable row level security;

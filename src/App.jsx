@@ -88,6 +88,7 @@ const photoCategories = [
   { id: 'lingerie', label: 'Prádlo' },
   { id: 'mirror', label: 'V zrcadle' },
   { id: 'romantic', label: 'Romantické' },
+  { id: 'moments', label: 'Dnešní moment' },
 ];
 
 const challengeCategories = [
@@ -679,21 +680,6 @@ function getMomentStoragePath(moment) {
   return moment?.media_path || moment?.video_path || null;
 }
 
-function getMomentFileExtension(file) {
-  if (file?.type === 'image/jpeg') return 'jpg';
-  if (file?.type === 'image/png') return 'png';
-  if (file?.type === 'image/webp') return 'webp';
-  if (file?.type === 'image/gif') return 'gif';
-  if (file?.type === 'image/heic') return 'heic';
-  if (file?.type === 'image/heif') return 'heif';
-  if (file?.type === 'video/mp4') return 'mp4';
-  if (file?.type === 'video/quicktime') return 'mov';
-  if (file?.type === 'video/x-m4v') return 'm4v';
-  const originalExtension = String(file?.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1];
-  if (originalExtension) return originalExtension.toLowerCase();
-  return 'webm';
-}
-
 function readVideoDuration(file) {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
@@ -856,6 +842,7 @@ export default function App() {
   const [encryptionPassphrase, setEncryptionPassphrase] = useState(() => sessionStorage.getItem(ENC_KEY_SESSION) || localStorage.getItem(ENC_KEY_DEVICE) || '');
   const statusNotifyTimers = useRef({});
   const postMediaCache = useRef(new Map());
+  const dailyMomentMediaCache = useRef(new Map());
   const postLoadVersion = useRef(0);
 
   const isBackendReady = Boolean(supabase);
@@ -879,6 +866,10 @@ export default function App() {
       if (String(url || '').startsWith('blob:')) URL.revokeObjectURL(url);
     });
     postMediaCache.current.clear();
+    dailyMomentMediaCache.current.forEach((url) => {
+      if (String(url || '').startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+    dailyMomentMediaCache.current.clear();
   }, []);
 
   useEffect(() => () => {
@@ -934,7 +925,12 @@ export default function App() {
       if (String(url || '').startsWith('blob:')) URL.revokeObjectURL(url);
     });
     postMediaCache.current.clear();
+    dailyMomentMediaCache.current.forEach((url) => {
+      if (String(url || '').startsWith('blob:')) URL.revokeObjectURL(url);
+    });
+    dailyMomentMediaCache.current.clear();
     loadPosts(couple.id);
+    loadDailyMoments(couple.id);
     loadKamaProgress(couple.id);
     if (couple.avatar_path) loadCoupleAvatar(couple);
     // Media must be rehydrated whenever the active encryption key changes.
@@ -1200,19 +1196,38 @@ export default function App() {
 
     const hydrated = await Promise.all((data || []).map(async (moment) => {
       const mediaPath = getMomentStoragePath(moment);
+      const cacheKey = `${moment.id}:${encryptionPassphrase || 'no-key'}`;
+      const cachedUrl = dailyMomentMediaCache.current.get(cacheKey);
+      if (cachedUrl) {
+        return { ...moment, signedUrl: cachedUrl, locked: false, ratings: moment.daily_moment_ratings || [] };
+      }
       if (!mediaPath) {
         return {
           ...moment,
           signedUrl: null,
+          locked: Boolean(moment.encrypted),
           ratings: moment.daily_moment_ratings || [],
         };
+      }
+      if (moment.encrypted && !encryptionPassphrase) {
+        return { ...moment, signedUrl: null, locked: true, ratings: moment.daily_moment_ratings || [] };
       }
       const { data: signedData, error: signedError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .createSignedUrl(mediaPath, 60 * 60);
+      let displayUrl = signedError ? null : signedData?.signedUrl || null;
+      if (moment.encrypted && displayUrl) {
+        try {
+          displayUrl = await decryptSignedUrlToObjectUrl(displayUrl, coupleId, encryptionPassphrase, moment.encryption_iv, moment.media_mime_type);
+        } catch {
+          displayUrl = null;
+        }
+      }
+      if (displayUrl) dailyMomentMediaCache.current.set(cacheKey, displayUrl);
       return {
         ...moment,
-        signedUrl: signedError ? null : signedData?.signedUrl || null,
+        signedUrl: displayUrl,
+        locked: Boolean(moment.encrypted && !displayUrl),
         ratings: moment.daily_moment_ratings || [],
       };
     }));
@@ -1778,18 +1793,22 @@ export default function App() {
 
   async function uploadDailyMoment(file, caption, durationHint = null) {
     if (!couple?.id || !session?.user?.id) throw new Error('Nejdřív vytvoř nebo připoj pár.');
+    if (!encryptionPassphrase) {
+      showE2eePrompt('Dnešní moment');
+      throw new Error('Nejdřív nastav společné E2EE heslo v profilu.');
+    }
     const media = await validateMomentMedia(file, durationHint);
-    const extension = getMomentFileExtension(file);
+    const encrypted = await encryptFileForCouple(file, couple.id, encryptionPassphrase);
     const today = getLocalDateKey();
-    const mediaPath = `${couple.id}/daily-moments/${today}/${session.user.id}-${crypto.randomUUID()}.${extension}`;
-    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(mediaPath, file, {
+    const mediaPath = `${couple.id}/daily-moments/${today}/${session.user.id}-${crypto.randomUUID()}.enc`;
+    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(mediaPath, encrypted.blob, {
       cacheControl: '3600',
       upsert: false,
-      contentType: media.mimeType,
+      contentType: 'application/octet-stream',
     });
     if (uploadError) throw uploadError;
 
-    const { error: insertError } = await supabase.from('daily_moments').insert({
+    const { data: moment, error: insertError } = await supabase.from('daily_moments').insert({
       couple_id: couple.id,
       moment_date: today,
       media_path: mediaPath,
@@ -1798,14 +1817,37 @@ export default function App() {
       video_path: media.kind === 'video' ? mediaPath : null,
       video_mime_type: media.kind === 'video' ? media.mimeType : null,
       duration_seconds: media.duration === null ? null : Number(media.duration.toFixed(2)),
+      encrypted: true,
+      encryption_iv: encrypted.iv,
       caption: caption.trim() || null,
-    });
+    }).select('id').single();
     if (insertError) {
       await supabase.storage.from(STORAGE_BUCKET).remove([mediaPath]);
       throw insertError;
     }
 
+    const { error: galleryError } = await supabase.from('posts').insert({
+      couple_id: couple.id,
+      author_id: session.user.id,
+      type: 'photo',
+      text: caption.trim() || 'Dnešní moment',
+      photo_category: 'moments',
+      image_path: mediaPath,
+      encrypted: true,
+      encryption_iv: encrypted.iv,
+      mime_type: media.mimeType,
+      media_kind: media.kind,
+      media_mime_type: media.mimeType,
+      daily_moment_id: moment.id,
+    });
+    if (galleryError) {
+      await supabase.from('daily_moments').delete().eq('id', moment.id).eq('author_id', session.user.id);
+      await supabase.storage.from(STORAGE_BUCKET).remove([mediaPath]);
+      throw galleryError;
+    }
+
     await loadDailyMoments(couple.id);
+    await loadPosts(couple.id);
     setToast('Dnešní moment je sdílený s partnerem/partnerkou.');
     await notifyPartner('daily_moment_added', 'MoodSync', 'Partner/ka přidal/a Dnešní moment.');
   }
@@ -1820,13 +1862,22 @@ export default function App() {
       .eq('couple_id', couple.id)
       .eq('author_id', session.user.id);
     if (error) throw error;
+    const { error: galleryError } = await supabase
+      .from('posts')
+      .delete()
+      .eq('daily_moment_id', moment.id)
+      .eq('couple_id', couple.id)
+      .eq('author_id', session.user.id);
     const paths = [...new Set([moment.media_path, moment.video_path].filter(Boolean))];
     const { error: storageError } = paths.length
       ? await supabase.storage.from(STORAGE_BUCKET).remove(paths)
       : { error: null };
     await loadDailyMoments(couple.id);
+    await loadPosts(couple.id);
     if (storageError) {
       setToast('Moment je smazaný, ale soubor se nepodařilo odstranit ze Storage.');
+    } else if (galleryError) {
+      setToast('Moment je smazaný, ale galerie se nepodařila synchronizovat.');
     } else {
       setToast('Dnešní moment byl smazaný.');
     }
@@ -2681,26 +2732,26 @@ function getMomentStatus(moment, otherMoment) {
   return { label: 'Čeká na hodnocení', className: 'bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-100' };
 }
 
-function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments }) {
+function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments, primary = false }) {
   const ownMoment = moments.find((moment) => moment.author_id === currentUserId);
   const partnerMoment = moments.find((moment) => moment.author_id !== currentUserId);
   const ownStatus = getMomentStatus(ownMoment, partnerMoment);
   const partnerStatus = getMomentStatus(partnerMoment, ownMoment);
 
   return (
-    <Card className="overflow-hidden border-fuchsia-200/70 bg-gradient-to-br from-fuchsia-50 to-pink-100 dark:border-fuchsia-400/20 dark:from-fuchsia-500/10 dark:to-pink-500/10">
+    <Card className={`overflow-hidden border-fuchsia-200/70 bg-gradient-to-br from-fuchsia-50 to-pink-100 dark:border-fuchsia-400/20 dark:from-fuchsia-500/10 dark:to-pink-500/10 ${primary ? 'ring-4 ring-fuchsia-200/70 shadow-2xl dark:ring-fuchsia-400/20' : ''}`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 rounded-full bg-fuchsia-500 px-3 py-1 text-xs font-black text-white"><Video size={15} /> Dnešní moment</div>
-          <h2 className="mt-3 text-2xl font-black">{getDailyMomentPrompt()}</h2>
-          <p className="mt-2 max-w-2xl text-xs text-gray-600 dark:text-gray-300">Fotky a videa vidí jen váš pár. Dnešní moment je uložený v privátním úložišti, ale na rozdíl od galerie není klientsky šifrovaný.</p>
+          <div className="inline-flex items-center gap-2 rounded-full bg-fuchsia-500 px-3 py-1 text-xs font-black text-white"><Video size={15} /> Dnešní moment · hlavní dnešní akce</div>
+          <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">{getDailyMomentPrompt()}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-300">Pošli fotku nebo krátké video. Po odeslání se stejný šifrovaný moment objeví i v galerii.</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
             <span className={`rounded-full px-3 py-1.5 ${ownStatus.className}`}>Ty: {loading ? 'Načítám…' : ownStatus.label}</span>
             <span className={`rounded-full px-3 py-1.5 ${partnerStatus.className}`}>Partner/ka: {loading ? 'Načítám…' : partnerStatus.label}</span>
           </div>
         </div>
-        <button type="button" onClick={openMoments} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-5 py-3 font-black text-white shadow-lg dark:bg-white dark:text-gray-900">
-          <Camera size={18} /> Otevřít moment
+        <button type="button" onClick={openMoments} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-6 py-4 text-lg font-black text-white shadow-lg transition hover:-translate-y-0.5 dark:bg-white dark:text-gray-900">
+          <Camera size={20} /> Přidat dnešní moment
         </button>
       </div>
     </Card>
@@ -2855,7 +2906,7 @@ function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId,
       <Card className="overflow-hidden bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-500 text-white">
         <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black"><Camera size={15} /> Dnešní moment · {getLocalDateKey()}</div>
         <h1 className="mt-3 text-3xl font-black">{getDailyMomentPrompt()}</h1>
-        <p className="mt-2 max-w-2xl text-sm text-white/85">Sdílej krátké video nebo fotku ze svého dne. Moment uvidí jen členové vašeho páru.</p>
+        <p className="mt-2 max-w-2xl text-sm text-white/85">Sdílej krátké video nebo fotku ze svého dne. Moment uvidí jen členové vašeho páru a před uložením se zašifruje společným E2EE heslem. Po uložení se objeví také v galerii.</p>
       </Card>
 
       {!couple && <EmptyState title="Nejdřív propojte pár" text="Dnešní moment můžete sdílet po vytvoření nebo připojení páru." icon={Users} />}
@@ -2971,7 +3022,7 @@ function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserI
             ? getStoredMomentMediaKind(moment) === 'image'
               ? <img src={moment.signedUrl} alt={moment.caption || 'Dnešní moment'} loading="lazy" decoding="async" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" />
               : <video src={moment.signedUrl} controls playsInline preload="metadata" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" />
-            : <div className="mt-4 rounded-3xl bg-gray-100 p-8 text-center text-sm font-bold dark:bg-white/10">Podepsaný odkaz na médium se nepodařilo vytvořit.</div>}
+            : <div className="mt-4 rounded-3xl bg-gray-100 p-8 text-center text-sm font-bold dark:bg-white/10">{moment.locked ? 'Toto médium je šifrované. Nastav stejné E2EE heslo v profilu.' : 'Podepsaný odkaz na médium se nepodařilo vytvořit.'}</div>}
           <div className="mt-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
               {moment.caption && <p className="whitespace-pre-wrap break-words font-bold">{moment.caption}</p>}
@@ -3027,6 +3078,8 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
 
   return (
     <>
+      <DailyMomentHomeCard moments={dailyMoments} loading={dailyMomentsLoading} currentUserId={currentUserId} openMoments={openMoments} primary />
+
       <Card className="overflow-hidden bg-gradient-to-br from-pink-500 via-fuchsia-500 to-purple-600 text-white">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -3040,8 +3093,6 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
           </div>
         </div>
       </Card>
-
-      <DailyMomentHomeCard moments={dailyMoments} loading={dailyMomentsLoading} currentUserId={currentUserId} openMoments={openMoments} />
 
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <DailyStatusCard sendDailyStatus={sendDailyStatus} />
@@ -3757,7 +3808,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
         >
           {galleryOnly ? (
             <>
-              <MediaCard imageUrl={post.signedUrl} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} compact />
+              <PostMediaCard post={post} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} compact />
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -3792,7 +3843,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
               </div>
               {post.type !== 'gif' && <p className="mt-3 text-lg">{post.text}</p>}
               {post.mood_label && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nálada: {post.mood_label}</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Blízkost: {post.closeness}%</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nadrženost: {post.heat}%</div></div>}
-              {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} />}
+              {post.type === 'photo' && <PostMediaCard post={post} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} />}
               {post.type === 'gif' && <GifMedia post={post} />}
             </>
           )}
@@ -3959,6 +4010,36 @@ function MediaCard({ blurred, locked, loading, category, imageUrl, openImage, co
         </div>
       )}
       {blurred && <div className="absolute inset-0 grid place-items-center"><div className="rounded-2xl bg-black/60 px-5 py-3 font-bold text-white backdrop-blur-xl">Panic blur aktivní</div></div>}
+    </div>
+  );
+}
+
+function PostMediaCard({ post, locked, loading, blurred, category, openImage, compact = false }) {
+  const isVideo = post.media_kind === 'video' || String(post.media_mime_type || post.mime_type || '').startsWith('video/');
+  if (!isVideo) {
+    return <MediaCard imageUrl={post.signedUrl} locked={locked} loading={loading} blurred={blurred} category={category} openImage={openImage} compact={compact} />;
+  }
+
+  return (
+    <div className={`relative overflow-hidden border border-white/20 bg-gray-950 ${compact ? 'h-56 md:h-72' : 'mt-4 min-h-72 rounded-3xl'}`}>
+      {post.signedUrl ? (
+        <video
+          src={post.signedUrl}
+          controls
+          playsInline
+          preload="metadata"
+          className={`h-full min-h-72 w-full object-contain ${blurred ? 'blur-sm' : ''}`}
+        />
+      ) : (
+        <div className={`grid h-full min-h-72 place-items-center p-5 text-center text-white ${loading ? 'animate-pulse' : ''}`}>
+          <div>
+            {loading ? <Video className="mx-auto mb-3" size={44} /> : <Lock className="mx-auto mb-3" size={44} />}
+            <div className="font-black">{loading ? 'Připravuju video…' : locked ? 'Šifrované video' : 'Video není dostupné'}</div>
+            {!loading && <p className="mt-2 text-sm text-white/80">{locked ? 'Zadej správné E2EE heslo v profilu.' : 'Zkus obnovit stránku.'}</p>}
+          </div>
+        </div>
+      )}
+      <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">Dnešní moment</div>
     </div>
   );
 }
