@@ -2666,9 +2666,9 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
           <button disabled={creatingCouple} onClick={createCouple} className="rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-60">
             {creatingCouple ? 'Vytvářím pár...' : 'Vytvořit nový pár a kód'}
           </button>
-          <div className="flex gap-3">
-            <TextInput aria-label="Párovací kód" autoCapitalize="characters" placeholder="LOVE-12AB34CD" value={pairCodeInput} onChange={(event) => setPairCodeInput(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && joinCouple()} />
-            <button onClick={joinCouple} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Připojit</button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <TextInput className="min-w-0 flex-1" aria-label="Párovací kód" autoCapitalize="characters" placeholder="LOVE-12AB34CD" value={pairCodeInput} onChange={(event) => setPairCodeInput(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && joinCouple()} />
+            <button onClick={joinCouple} className="w-full shrink-0 rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900 sm:w-auto">Připojit</button>
           </div>
         </div>
       </div>
@@ -4323,9 +4323,9 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, profileName, setProfil
         </div>
 
         <div>
-          <div className="flex gap-3">
-            <TextInput placeholder={profile?.display_name || 'Tvoje jméno'} value={profileName} onChange={(event) => setProfileName(event.target.value)} />
-            <button onClick={() => updateProfileName(profileName)} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Uložit</button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <TextInput className="min-w-0 flex-1" placeholder={profile?.display_name || 'Tvoje jméno'} value={profileName} onChange={(event) => setProfileName(event.target.value)} />
+            <button onClick={() => updateProfileName(profileName)} className="w-full shrink-0 rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900 sm:w-auto">Uložit</button>
           </div>
           <div className="mt-6 rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
             <h3 className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="text-emerald-500" /> End-to-end šifrování fotek</h3>
