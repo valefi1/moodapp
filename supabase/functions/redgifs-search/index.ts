@@ -68,7 +68,7 @@ function sanitizeGif(value: unknown) {
   const urls = gif.urls && typeof gif.urls === "object" ? gif.urls as Record<string, unknown> : {};
   const externalId = typeof gif.id === "string" && /^[a-z0-9]+$/i.test(gif.id) ? gif.id : null;
   const mediaUrl = safeRedgifsUrl(urls.hd) || safeRedgifsUrl(urls.sd);
-  const thumbnailUrl = safeRedgifsUrl(urls.poster) || safeRedgifsUrl(urls.thumbnail);
+  const thumbnailUrl = safeRedgifsUrl(urls.thumbnail) || safeRedgifsUrl(urls.poster);
   const embedUrl = safeRedgifsEmbedUrl(urls.html);
 
   if (!externalId || (!mediaUrl && !thumbnailUrl && !embedUrl)) return null;
@@ -155,7 +155,7 @@ serve(async (req) => {
     }
     if (!membership) return jsonResponse({ error: "Forbidden" }, 403);
 
-    const tokenPayload = await fetchJson(`${REDGIFS_API_URL}/auth/temporary`, {
+    const tokenPayload = await fetchJson(`${REDGIFS_API_URL}/auth/temporary?path=%2Fsearch`, {
       headers: { Accept: "application/json" },
     });
     const temporaryToken = tokenPayload && typeof tokenPayload.token === "string" ? tokenPayload.token : null;
