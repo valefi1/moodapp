@@ -54,5 +54,21 @@ create policy "Members can manage own push subscriptions"
 on public.push_subscriptions
 for all
 to authenticated
-using (auth.uid() = user_id)
-with check (auth.uid() = user_id);
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.couple_members member
+    where member.couple_id = push_subscriptions.couple_id
+      and member.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.couple_members member
+    where member.couple_id = push_subscriptions.couple_id
+      and member.user_id = auth.uid()
+  )
+);

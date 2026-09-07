@@ -116,15 +116,16 @@ serve(async (req) => {
     let checked = 0;
     let sent = 0;
     let skipped = 0;
-    const perUser = new Map<string, any[]>();
+    const perUserCouple = new Map<string, any[]>();
 
     for (const sub of subscriptions || []) {
-      const userSubscriptions = perUser.get(sub.user_id) || [];
+      const groupKey = `${sub.user_id}:${sub.couple_id}`;
+      const userSubscriptions = perUserCouple.get(groupKey) || [];
       userSubscriptions.push(sub);
-      perUser.set(sub.user_id, userSubscriptions);
+      perUserCouple.set(groupKey, userSubscriptions);
     }
 
-    for (const userSubscriptions of perUser.values()) {
+    for (const userSubscriptions of perUserCouple.values()) {
       const sub = userSubscriptions[0];
       checked += 1;
 
@@ -240,12 +241,13 @@ serve(async (req) => {
           .from("push_notification_log")
           .delete()
           .eq("user_id", sub.user_id)
+          .eq("couple_id", sub.couple_id)
           .eq("event_type", candidate.eventType)
           .eq("period_key", candidate.periodKey);
       }
     }
 
-    return jsonResponse({ success: true, checked, sent, skipped, uniqueUsers: perUser.size, todayKey });
+    return jsonResponse({ success: true, checked, sent, skipped, uniqueUserCouples: perUserCouple.size, todayKey });
   } catch (err) {
     console.error("mood-daily-reminder error", err);
     return jsonResponse({ error: err?.message || String(err) }, 500);
