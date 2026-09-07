@@ -113,7 +113,7 @@ supabase/daily_moments_setup.sql
 
 Soubor vytvoří nebo zpětně kompatibilně rozšíří tabulky pro denní fotografie či krátká videa a partnerská hodnocení včetně indexů a RLS pravidel. Staré řádky ve `video_path` zůstávají funkční a obecná media metadata se při migraci doplní. Funkce používá existující privátní bucket `couple-media`; nový Edge Function ani změna `supabase/config.toml` nejsou potřeba.
 
-Fotka může mít nejvýše 15 MB; video nejvýše 25 MB a 30 sekund. Média jsou v Supabase Storage uložená v privátní cestě páru a aplikace je načítá přes krátkodobý podepsaný odkaz. Média Dnešního momentu zatím nejsou šifrovaná klientským E2EE, takže k nim může mít provozovatel Supabase projektu technický přístup. Přístup přes aplikaci a databázové RLS je omezený na členy daného páru.
+Fotka může mít nejvýše 15 MB; video nejvýše 25 MB a 30 sekund. Nové uploady Dnešního momentu se před uložením klientsky zašifrují stejným E2EE heslem jako galerie a jako odkaz na stejný ciphertext se zapíší také do galerie — nevzniká druhá kopie souboru. Storage zůstává privátní a aplikace používá pouze krátkodobé podepsané odkazy. Starší momenty vytvořené před touto změnou se automaticky nepřešifrují; ty je potřeba případně smazat a nahrát znovu.
 
 ### Scheduled engagement reminders
 
