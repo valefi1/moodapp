@@ -67,7 +67,10 @@ function sanitizeGif(value: unknown) {
   const gif = value as Record<string, unknown>;
   const urls = gif.urls && typeof gif.urls === "object" ? gif.urls as Record<string, unknown> : {};
   const externalId = typeof gif.id === "string" && /^[a-z0-9]+$/i.test(gif.id) ? gif.id : null;
-  const mediaUrl = safeRedgifsUrl(urls.hd) || safeRedgifsUrl(urls.sd);
+  const mediaUrl = safeRedgifsUrl(urls.hd)
+    || safeRedgifsUrl(urls.sd)
+    || safeRedgifsUrl(urls.webm)
+    || safeRedgifsUrl(urls.mp4);
   const thumbnailUrl = safeRedgifsUrl(urls.thumbnail) || safeRedgifsUrl(urls.poster);
   const embedUrl = safeRedgifsEmbedUrl(urls.html);
 
@@ -79,6 +82,7 @@ function sanitizeGif(value: unknown) {
     mediaUrl,
     thumbnailUrl,
     embedUrl,
+    tags: Array.isArray(gif.tags) ? gif.tags.filter((tag): tag is string => typeof tag === "string").slice(0, 20) : [],
     duration: finiteNumber(gif.duration),
     width: positiveInteger(gif.width),
     height: positiveInteger(gif.height),
@@ -163,6 +167,7 @@ serve(async (req) => {
 
     const searchUrl = new URL(`${REDGIFS_API_URL}/gifs/search`);
     searchUrl.searchParams.set("query", query);
+    searchUrl.searchParams.set("order", "score");
     searchUrl.searchParams.set("count", String(count));
     const searchPayload = await fetchJson(searchUrl.toString(), {
       headers: {
