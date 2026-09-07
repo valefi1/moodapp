@@ -1115,18 +1115,18 @@ export default function App() {
     if (!supabase || !coupleId) return;
     setDailyMomentsLoading(true);
     setDailyMomentsError('');
-    const today = getLocalDateKey();
     const { data, error } = await supabase
       .from('daily_moments')
       .select('*, daily_moment_ratings(*)')
       .eq('couple_id', coupleId)
-      .eq('moment_date', today)
-      .order('created_at', { ascending: true });
+      .order('moment_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(90);
 
     if (error) {
       setDailyMoments([]);
       setDailyMomentsLoading(false);
-      setDailyMomentsError(`Dnešní moment se nepodařilo načíst: ${error.message}`);
+      setDailyMomentsError(`Dnešní momenty se nepodařilo načíst: ${error.message}`);
       return;
     }
 
@@ -1869,6 +1869,12 @@ export default function App() {
       await notifyPartner('challenge_completed', 'MoodSync', `Partner/ka ti udělil/a +${completedChallenge?.xp || 10} XP za splněnou výzvu.`);
     }
   }
+  async function requestChallengeConfirmation(challenge) {
+    if (!challenge?.id) return;
+    const result = await notifyPartner('challenge_confirmation_requested', 'MoodSync výzva', `Hotovo: ${challenge.title}. Potvrď partnerovi/partnerce splnění a případně uděl XP.`);
+    setToast(result.ok ? 'Partner/ka dostal/a žádost o potvrzení.' : `Žádost se nepodařilo odeslat: ${result.error}`);
+    return result;
+  }
 
 
   async function challengePartner(challenge, hours = 24) {
@@ -2178,6 +2184,10 @@ export default function App() {
 
   const photoPosts = filteredPosts.filter((post) => post.type === 'photo');
   const chatPosts = posts.filter((post) => post.type === 'chat' || post.type === 'gif');
+  const todayDailyMoments = useMemo(
+    () => dailyMoments.filter((moment) => moment.moment_date === getLocalDateKey()),
+    [dailyMoments]
+  );
   const filteredChallenges = challenges.filter((challenge) => challengeCategory === 'all' || challenge.category === challengeCategory);
   const challengeStats = getChallengeStats(challenges, session?.user?.id, partnerDayCompletions);
 
@@ -2293,7 +2303,7 @@ export default function App() {
               completePartnerDay={completePartnerDay}
               sendDailyStatus={sendDailyStatus}
               completeEveningRitual={completeEveningRitual}
-              dailyMoments={dailyMoments}
+              dailyMoments={todayDailyMoments}
               dailyMomentsLoading={dailyMomentsLoading}
               openMoments={() => setActiveTab('moments')}
             />
@@ -2303,9 +2313,9 @@ export default function App() {
             {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} searchGifs={searchGifs} sendGif={sendGif} gifPickerEnabled={Boolean(couple?.id && session?.user?.id)} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'feed' && <FeedPanel posts={filteredPosts} currentUserId={session?.user?.id} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} dailyMoments={dailyMoments} currentUserId={session?.user?.id} openMoments={() => setActiveTab('moments')} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
-            {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
+            {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} requestChallengeConfirmation={requestChallengeConfirmation} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
             {activeTab === 'more' && <MorePanel setActiveTab={setActiveTab} />}
-            {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={dailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} panicMode={panicMode} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
+            {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={todayDailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} panicMode={panicMode} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
             {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} profileName={profileName} setProfileName={setProfileName} updateProfileName={updateProfileName} partnerName={partnerName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
@@ -2702,7 +2712,7 @@ function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments, pri
             <span className={`rounded-full px-3 py-1.5 ${partnerStatus.className}`}>Partner/ka: {loading ? 'Načítám…' : partnerStatus.label}</span>
           </div>
         </div>
-        <button type="button" onClick={openMoments} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-6 py-4 text-lg font-black text-white shadow-lg transition hover:-translate-y-0.5 dark:bg-white dark:text-gray-900">
+        <button type="button" onClick={openMoments} className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-4 py-3 text-base font-black text-white shadow-lg transition hover:-translate-y-0.5 dark:bg-white dark:text-gray-900 sm:w-auto sm:px-6 sm:py-4 sm:text-lg">
           <Camera size={20} /> {ownMoment ? 'Zobrazit dnešní moment' : 'Přidat dnešní moment'}
         </button>
       </div>
@@ -3538,7 +3548,7 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, s
   }
 
   return (
-    <Card className="flex h-[calc(100dvh-9.5rem)] min-h-[560px] flex-col overflow-hidden p-0 sm:h-[calc(100dvh-11rem)]">
+    <Card className="flex h-[calc(100dvh-13rem)] min-h-[360px] flex-col overflow-hidden p-0 sm:h-[calc(100dvh-11rem)] sm:min-h-[560px]">
       <div className="shrink-0 border-b border-pink-100/80 bg-white/80 p-4 backdrop-blur dark:border-white/10 dark:bg-gray-950/60 sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -3555,7 +3565,7 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, s
               key={text}
               type="button"
               onClick={() => sendMessage(text)}
-              className="shrink-0 rounded-full border border-pink-100 bg-white px-4 py-2 text-sm font-bold text-pink-600 shadow-sm transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:text-pink-100 dark:hover:bg-white/15"
+              className="shrink-0 rounded-full border border-pink-100 bg-white px-3 py-1.5 text-xs font-bold text-pink-600 shadow-sm transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:text-pink-100 dark:hover:bg-white/15 sm:px-4 sm:py-2 sm:text-sm"
             >
               {text}
             </button>
@@ -3614,7 +3624,7 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, s
         )}
       </div>
 
-      <div className="shrink-0 border-t border-pink-100/80 bg-white/95 p-3 backdrop-blur dark:border-white/10 dark:bg-gray-950/95 sm:p-4">
+      <div className="shrink-0 border-t border-pink-100/80 bg-white/95 p-3 pb-[calc(.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-white/10 dark:bg-gray-950/95 sm:p-4">
         {gifPickerEnabled && gifPickerOpen && (
           <div className="mb-3 max-h-[48dvh] overflow-y-auto rounded-3xl border border-pink-100 bg-pink-50 p-3 dark:border-white/10 dark:bg-white/5 sm:p-4">
             <form onSubmit={handleGifSearch} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
@@ -3661,7 +3671,7 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, s
 }
 
 function FeedPanel({ posts, currentUserId, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
-  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Deník páru</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Zprávy, nálady a fotky na jednom místě.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} currentUserId={currentUserId} panicMode={panicMode} openImage={openImage} deletePost={deletePost} />{hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} />}</Card>;
+  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Deník páru</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Zprávy, nálady a fotky na jednom místě.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex flex-col gap-2 sm:flex-row"><TextInput className="min-w-0 flex-1" value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="w-full shrink-0 rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900 sm:w-auto">Poslat</button></div><FeedList posts={posts} currentUserId={currentUserId} panicMode={panicMode} openImage={openImage} deletePost={deletePost} />{hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} />}</Card>;
 }
 
 function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
@@ -3951,7 +3961,7 @@ function FullscreenImageViewer({ image, onClose }) {
   );
 }
 
-function ChallengesPanel({ challenges = [], allChallenges = [], category, setCategory, addChallenge, updateChallenge, challengePartner, assignDebtTask, repayDebt, currentUserId, stats }) {
+function ChallengesPanel({ challenges = [], allChallenges = [], category, setCategory, addChallenge, updateChallenge, requestChallengeConfirmation, challengePartner, assignDebtTask, repayDebt, currentUserId, stats }) {
   const safeStats = stats || getChallengeStats(allChallenges, currentUserId);
   const debtRewards = [
     { label: 'Masáž 20 minut', value: 20 },
@@ -4031,19 +4041,26 @@ function ChallengesPanel({ challenges = [], allChallenges = [], category, setCat
       <Card>
         <div className="mb-5 flex flex-wrap gap-2">{challengeCategories.map((item) => <PillButton key={item.id} active={category === item.id} onClick={() => setCategory(item.id)}>{item.label}</PillButton>)}</div>
         <div className="grid gap-4 lg:grid-cols-2">
-          {challenges.map((challenge) => <ChallengeCard key={challenge.id} challenge={challenge} updateChallenge={updateChallenge} challengePartner={challengePartner} currentUserId={currentUserId} />)}
+          {challenges.map((challenge) => <ChallengeCard key={challenge.id} challenge={challenge} updateChallenge={updateChallenge} requestChallengeConfirmation={requestChallengeConfirmation} challengePartner={challengePartner} currentUserId={currentUserId} />)}
         </div>
       </Card>
     </div>
   );
 }
 
-function ChallengeCard({ challenge, updateChallenge, challengePartner, currentUserId }) {
+function ChallengeCard({ challenge, updateChallenge, requestChallengeConfirmation, challengePartner, currentUserId }) {
   const [hours, setHours] = useState(24);
+  const [confirmationRequested, setConfirmationRequested] = useState(false);
   const isAssignedToMe = challenge.assigned_to === currentUserId;
   const canAwardPartner = challenge.challenge_status === 'active' && challenge.challenged_by === currentUserId && challenge.assigned_to && !challenge.completed;
   const isActive = challenge.challenge_status === 'active';
   const isOpen = !challenge.completed && !isActive && !['failed', 'debt_assigned', 'debt_repaid', 'completed'].includes(challenge.challenge_status);
+
+  async function handleConfirmationRequest() {
+    setConfirmationRequested(true);
+    const result = await requestChallengeConfirmation?.(challenge);
+    if (result?.ok === false) setConfirmationRequested(false);
+  }
 
   return (
     <article className="rounded-3xl border border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5">
@@ -4054,7 +4071,8 @@ function ChallengeCard({ challenge, updateChallenge, challengePartner, currentUs
             <span className="rounded-full bg-pink-500 px-3 py-1 font-bold text-white">{challenge.category}</span>
             <span className="rounded-full bg-purple-500 px-3 py-1 font-bold text-white">+{challenge.xp || 10} XP</span>
             {isActive && <span className="rounded-full bg-amber-400 px-3 py-1 font-bold text-gray-900">Limit {formatDate(challenge.challenge_deadline)}</span>}
-            {isAssignedToMe && isActive && <span className="rounded-full bg-white px-3 py-1 font-bold text-pink-700 dark:bg-white/10 dark:text-pink-200">Plním já</span>}
+            {isAssignedToMe && isActive && <span className="rounded-full bg-white px-3 py-1 font-bold text-pink-700 dark:bg-white/10 dark:text-pink-200">Plníš ty</span>}
+            {isActive && challenge.challenged_by === currentUserId && challenge.assigned_to !== currentUserId && <span className="rounded-full bg-white px-3 py-1 font-bold text-purple-700 dark:bg-white/10 dark:text-purple-200">Plní partner/ka</span>}
             {challenge.completed_by && <span className="rounded-full bg-emerald-500 px-3 py-1 font-bold text-white">Body uděleny</span>}
           </div>
         </div>
@@ -4066,7 +4084,8 @@ function ChallengeCard({ challenge, updateChallenge, challengePartner, currentUs
         </div>
       ) : isAssignedToMe && isActive ? (
         <div className="mt-4 rounded-2xl bg-white p-3 text-sm font-bold text-gray-600 dark:bg-white/10 dark:text-gray-300">
-          Tuhle výzvu máš splnit ty. Až ji splníš, partner/ka ti body potvrdí a přidá.
+          <div>Tuhle výzvu máš splnit ty. Až ji splníš, požádej partnera/partnerku o potvrzení.</div>
+          <button type="button" disabled={confirmationRequested} onClick={handleConfirmationRequest} className="mt-3 w-full rounded-2xl bg-pink-500 px-4 py-2.5 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-emerald-500">{confirmationRequested ? '✓ Žádost odeslána' : 'Požádat o potvrzení splnění'}</button>
         </div>
       ) : canAwardPartner ? (
         <button

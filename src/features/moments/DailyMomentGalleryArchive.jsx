@@ -25,7 +25,8 @@ export function DailyMomentGalleryArchive({ moments, currentUserId, panicMode, o
             </summary>
             <div className="grid gap-2 border-t border-fuchsia-100 p-2 sm:grid-cols-2 dark:border-white/10">
               {dayMoments.map((moment) => {
-                const rating = moment.ratings?.find((item) => item.rater_id === currentUserId) || moment.ratings?.[0];
+                const myRating = moment.ratings?.find((item) => item.rater_id === currentUserId);
+                const anyRating = myRating || moment.ratings?.[0];
                 const isVideo = getStoredMomentMediaKind(moment) === 'video';
                 const blurred = Boolean(panicMode);
                 return (
@@ -42,7 +43,7 @@ export function DailyMomentGalleryArchive({ moments, currentUserId, panicMode, o
                     <div className="p-3">
                       <div className="flex items-center justify-between gap-2 text-xs font-bold text-gray-500 dark:text-gray-300">
                         <span>{isVideo ? 'Video' : 'Fotka'} · {formatDate(moment.created_at)}</span>
-                        {rating ? <span aria-label={`${rating.score} z 5 srdcí`}>{'❤️'.repeat(rating.score)}</span> : <span>Bez hodnocení</span>}
+                        {myRating ? <span aria-label={`${myRating.score} z 5 srdcí, tvoje hodnocení`}>{'❤️'.repeat(myRating.score)} <span className="text-[10px]">Tvoje</span></span> : anyRating ? <span aria-label={`${anyRating.score} z 5 srdcí, hodnocení partnera`}>{'❤️'.repeat(anyRating.score)} <span className="text-[10px]">Partner/ka</span></span> : <span>Bez hodnocení</span>}
                       </div>
                       {moment.caption && <p className="mt-1 line-clamp-2 text-sm font-bold">{moment.caption}</p>}
                       <button type="button" onClick={openMoments} className="mt-2 text-xs font-black text-pink-600 underline underline-offset-2 dark:text-pink-200">Otevřít hodnocení</button>
