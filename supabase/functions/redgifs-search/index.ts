@@ -162,7 +162,7 @@ serve(async (req) => {
     if (!temporaryToken) throw new Error("RedGIFs did not return a temporary token");
 
     const searchUrl = new URL(`${REDGIFS_API_URL}/gifs/search`);
-    searchUrl.searchParams.set("search_text", query);
+    searchUrl.searchParams.set("query", query);
     searchUrl.searchParams.set("count", String(count));
     const searchPayload = await fetchJson(searchUrl.toString(), {
       headers: {
