@@ -728,6 +728,7 @@ export default function App() {
   const [dark, setDark] = useState(local.dark ?? true);
   const [activeTab, setActiveTab] = useState(getInitialActiveTab(local.activeTab || 'home'));
   const [profile, setProfile] = useState(null);
+  const [profileName, setProfileName] = useState('');
   const [couple, setCouple] = useState(null);
   const [coupleAvatarUrl, setCoupleAvatarUrl] = useState(null);
   const [partnerName, setPartnerName] = useState('');
@@ -775,6 +776,11 @@ export default function App() {
   const selectedMood = moods.find((mood) => mood.id === selectedMoodId) || moods[0];
   const appClass = dark ? 'dark' : '';
   const encryptionReady = Boolean(couple?.id && encryptionPassphrase);
+
+  useEffect(() => () => {
+    Object.values(statusNotifyTimers.current).forEach((timer) => window.clearTimeout(timer));
+    statusNotifyTimers.current = {};
+  }, []);
 
   function showE2eePrompt(context = 'fotky') {
     setE2eePrompt(context);
@@ -901,6 +907,7 @@ export default function App() {
       const { data: existingProfile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
       const userProfile = existingProfile || await createProfile();
       setProfile(userProfile);
+      setProfileName(userProfile.display_name || '');
 
       const { data: membership } = await supabase
         .from('couple_members')
@@ -935,6 +942,7 @@ export default function App() {
     const { data, error } = await supabase.from('profiles').upsert({ id: session.user.id, display_name: name.trim() }).select('*').single();
     if (error) return setToast(error.message);
     setProfile(data);
+    setProfileName(data.display_name || '');
   }
 
   function mergePostRecord(nextPost) {
@@ -2291,13 +2299,13 @@ export default function App() {
 
           <AppErrorBoundary resetKey={activeTab}>
             {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} searchGifs={searchGifs} sendGif={sendGif} gifPickerEnabled={Boolean(couple?.id && session?.user?.id)} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
-            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
+            {activeTab === 'feed' && <FeedPanel posts={filteredPosts} currentUserId={session?.user?.id} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} dailyMoments={dailyMoments} currentUserId={session?.user?.id} openMoments={() => setActiveTab('moments')} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
             {activeTab === 'more' && <MorePanel setActiveTab={setActiveTab} />}
             {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={dailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
             {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
-            {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
+            {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} profileName={profileName} setProfileName={setProfileName} updateProfileName={updateProfileName} partnerName={partnerName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
         </div>
 
@@ -2681,7 +2689,7 @@ function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments, pri
           </div>
         </div>
         <button type="button" onClick={openMoments} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-6 py-4 text-lg font-black text-white shadow-lg transition hover:-translate-y-0.5 dark:bg-white dark:text-gray-900">
-          <Camera size={20} /> Přidat dnešní moment
+          <Camera size={20} /> {ownMoment ? 'Zobrazit dnešní moment' : 'Přidat dnešní moment'}
         </button>
       </div>
     </Card>
@@ -3630,8 +3638,8 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, s
   );
 }
 
-function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
-  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Deník páru</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Zprávy, nálady a fotky na jednom místě.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} openImage={openImage} deletePost={deletePost} />{hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} />}</Card>;
+function FeedPanel({ posts, currentUserId, message, setMessage, sendMessage, addPhoto, deletePost, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
+  return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Deník páru</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Zprávy, nálady a fotky na jednom místě.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} currentUserId={currentUserId} panicMode={panicMode} openImage={openImage} deletePost={deletePost} />{hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} />}</Card>;
 }
 
 function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
@@ -3671,7 +3679,7 @@ function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, ad
       <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} />
       <GalleryUploadForm addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} />
       {galleryMoments.length > 0 && <DailyMomentGalleryArchive moments={galleryMoments} currentUserId={currentUserId} openMoments={openMoments} formatDate={formatDate} getStoredMomentMediaKind={getStoredMomentMediaKind} />}
-      {(visiblePosts.length > 0 || galleryMoments.length === 0) && <FeedList posts={visiblePosts} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
+      {(visiblePosts.length > 0 || galleryMoments.length === 0) && <FeedList posts={visiblePosts} currentUserId={currentUserId} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
       {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší fotky" />}
     </Card>
   );
@@ -3725,7 +3733,7 @@ function PhotoUploadButton({ addPhoto, encryptionReady, onMissingE2EE }) {
   );
 }
 
-function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost }) {
+function FeedList({ posts, currentUserId, panicMode, galleryOnly = false, openImage, deletePost }) {
   if (posts.length === 0) return <EmptyState title="Zatím tu nic není" text={galleryOnly ? 'Nahrajte první společnou fotku.' : 'Pošlete první zprávu, náladu nebo fotku.'} icon={galleryOnly ? Image : MessageCircle} />;
   return (
     <div className={galleryOnly ? 'grid max-h-[760px] grid-cols-2 gap-2 overflow-auto pr-1 sm:gap-4' : 'max-h-[650px] space-y-4 overflow-auto pr-1'}>
@@ -3743,13 +3751,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
                     <div className="text-sm font-black">{photoCategories.find((category) => category.id === post.photo_category)?.label || 'Fotka'}</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => deletePost?.(post)}
-                    className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white"
-                  >
-                    Smazat
-                  </button>
+                  {post.author_id === currentUserId && <button type="button" onClick={() => deletePost?.(post)} className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white">Smazat</button>}
                 </div>
                 <p className="mt-3 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{post.text}</p>
               </div>
@@ -3760,13 +3762,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
                 <div className="font-black">{post.type === 'photo' ? 'Fotka' : post.type === 'gif' ? 'GIF' : post.type === 'mood' ? 'Nálada' : post.type === 'status' ? 'Status' : post.type === 'ritual' ? 'Rituál' : 'Zpráva'}</div>
                 <div className="flex items-center gap-3">
                   <div className="text-sm text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
-                  <button
-                    type="button"
-                    onClick={() => deletePost?.(post)}
-                    className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white"
-                  >
-                    Smazat
-                  </button>
+                  {post.author_id === currentUserId && <button type="button" onClick={() => deletePost?.(post)} className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white">Smazat</button>}
                 </div>
               </div>
               {post.type !== 'gif' && <p className="mt-3 text-lg">{post.text}</p>}
@@ -4267,7 +4263,7 @@ function PoseGuide({ pose, title, compact = false }) {
   return <div className={`bg-[#fff7f3] dark:bg-[#120d18] ${compact ? 'p-2' : 'p-5'}`}><div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-pink-200 bg-gradient-to-br from-pink-50 to-rose-50 p-2 text-center dark:border-fuchsia-400/20 dark:from-pink-500/10 dark:to-purple-500/10 sm:rounded-3xl sm:p-4"><div className={`${compact ? 'h-8 w-8 sm:h-10 sm:w-10' : 'h-20 w-20'} flex items-center justify-center rounded-2xl bg-white shadow-lg dark:bg-white/10`}><Icon className="text-pink-500" size={compact ? 16 : 36} /></div><div className={`${compact ? 'mt-1.5 text-[11px] leading-tight sm:text-xs' : 'mt-4 text-xl'} font-black text-gray-900 dark:text-white`}>{title}</div><div className="mt-1 rounded-full bg-pink-100 px-2 py-1 text-[9px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-[10px]">{guide.label}</div></div></div>;
 }
 
-function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartnerName, updateProfileName, uploadCoupleAvatar, encryptionPassphrase, saveEncryptionPassphrase, signOut }) {
+function ProfilePanel({ profile, couple, coupleAvatarUrl, profileName, setProfileName, updateProfileName, uploadCoupleAvatar, encryptionPassphrase, saveEncryptionPassphrase, signOut }) {
   const [draftPassphrase, setDraftPassphrase] = useState(encryptionPassphrase || '');
   const [rememberOnDevice, setRememberOnDevice] = useState(() => Boolean(localStorage.getItem(ENC_KEY_DEVICE)));
 
@@ -4303,8 +4299,8 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, partnerName, setPartne
 
         <div>
           <div className="flex gap-3">
-            <TextInput placeholder={profile?.display_name || 'Tvoje jméno'} value={partnerName} onChange={(event) => setPartnerName(event.target.value)} />
-            <button onClick={() => updateProfileName(partnerName)} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Uložit</button>
+            <TextInput placeholder={profile?.display_name || 'Tvoje jméno'} value={profileName} onChange={(event) => setProfileName(event.target.value)} />
+            <button onClick={() => updateProfileName(profileName)} className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Uložit</button>
           </div>
           <div className="mt-6 rounded-[2rem] border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
             <h3 className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="text-emerald-500" /> End-to-end šifrování fotek</h3>

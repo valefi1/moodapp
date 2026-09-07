@@ -182,7 +182,7 @@ serve(async (req) => {
     const searchPayload = await fetchJson(searchUrl.toString(), {
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${temporaryToken}`,
+        Authorization: 'Bearer ' + temporaryToken,
         Origin: "https://www.redgifs.com",
         Referer: "https://www.redgifs.com/",
       },
