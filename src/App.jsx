@@ -3788,6 +3788,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
 
 function GifMedia({ post, compact = false }) {
   const [videoFailed, setVideoFailed] = useState(!post.gif_media_url);
+  const [videoReady, setVideoReady] = useState(false);
   const [mediaImageFailed, setMediaImageFailed] = useState(!post.gif_media_url);
   const [thumbnailFailed, setThumbnailFailed] = useState(!post.gif_thumbnail_url);
   const width = Number.isInteger(post.gif_width) && post.gif_width > 0 ? post.gif_width : undefined;
@@ -3797,6 +3798,12 @@ function GifMedia({ post, compact = false }) {
   const embedUrl = getSafeRedgifsEmbedUrl(post.gif_embed_url)
     || (/^[a-z0-9]+$/i.test(post.gif_external_id || '') ? `https://www.redgifs.com/ifr/${post.gif_external_id.toLowerCase()}` : null);
   const mediaClassName = `w-full bg-gray-950 object-contain ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`;
+
+  useEffect(() => {
+    if (videoFailed || videoReady || !post.gif_media_url) return undefined;
+    const timeout = window.setTimeout(() => setVideoFailed(true), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [post.gif_media_url, videoFailed, videoReady]);
 
   return (
     <div className={compact ? '' : 'mt-4'}>
@@ -3813,6 +3820,7 @@ function GifMedia({ post, compact = false }) {
           loop
           playsInline
           preload="metadata"
+          onCanPlay={() => setVideoReady(true)}
           onError={() => setVideoFailed(true)}
           className={mediaClassName}
         >
@@ -3840,9 +3848,16 @@ function GifMedia({ post, compact = false }) {
 
 function GifSearchCard({ gif, disabled, sending, onSelect }) {
   const [videoFailed, setVideoFailed] = useState(!gif.mediaUrl);
+  const [videoReady, setVideoReady] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(!gif.thumbnailUrl);
   const embedUrl = getSafeRedgifsEmbedUrl(gif.embedUrl);
   const sourceUrl = getSafeRedgifsSourceUrl(gif.sourceUrl, gif.externalId);
+
+  useEffect(() => {
+    if (videoFailed || videoReady || !gif.mediaUrl) return undefined;
+    const timeout = window.setTimeout(() => setVideoFailed(true), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [gif.mediaUrl, videoFailed, videoReady]);
 
   return (
     <div className="min-w-0">
@@ -3857,6 +3872,7 @@ function GifSearchCard({ gif, disabled, sending, onSelect }) {
             loop
             playsInline
             preload="metadata"
+            onCanPlay={() => setVideoReady(true)}
             onError={() => setVideoFailed(true)}
             className="h-full w-full object-cover"
           />
