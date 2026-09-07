@@ -3794,6 +3794,8 @@ function GifMedia({ post, compact = false }) {
   const height = Number.isInteger(post.gif_height) && post.gif_height > 0 ? post.gif_height : undefined;
   const duration = typeof post.gif_duration === 'number' && Number.isFinite(post.gif_duration) ? Math.round(post.gif_duration) : null;
   const sourceUrl = getSafeRedgifsSourceUrl(post.gif_source_url, post.gif_external_id);
+  const embedUrl = getSafeRedgifsEmbedUrl(post.gif_embed_url)
+    || (/^[a-z0-9]+$/i.test(post.gif_external_id || '') ? `https://www.redgifs.com/ifr/${post.gif_external_id.toLowerCase()}` : null);
   const mediaClassName = `w-full bg-gray-950 object-contain ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`;
 
   return (
@@ -3819,6 +3821,8 @@ function GifMedia({ post, compact = false }) {
         <img src={post.gif_media_url} alt="GIF z RedGIFs" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setMediaImageFailed(true)} className={mediaClassName} />
       ) : !thumbnailFailed ? (
         <img src={post.gif_thumbnail_url} alt="Náhled GIFu z RedGIFs" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className={mediaClassName} />
+      ) : embedUrl ? (
+        <RedgifsEmbed embedUrl={embedUrl} compact={compact} title="GIF z RedGIFs" />
       ) : (
         <div className={`${mediaClassName} grid min-h-36 rounded-3xl place-items-center p-4 text-center text-sm font-bold text-white`}>GIF se nepodařilo načíst.</div>
       )}
@@ -3835,6 +3839,7 @@ function GifMedia({ post, compact = false }) {
 
 function GifSearchCard({ gif, disabled, sending, onSelect }) {
   const [thumbnailFailed, setThumbnailFailed] = useState(!gif.thumbnailUrl);
+  const embedUrl = getSafeRedgifsEmbedUrl(gif.embedUrl);
   const sourceUrl = getSafeRedgifsSourceUrl(gif.sourceUrl, gif.externalId);
 
   return (
@@ -3842,6 +3847,10 @@ function GifSearchCard({ gif, disabled, sending, onSelect }) {
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-gray-900 text-white">
         {!thumbnailFailed ? (
           <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className="h-full w-full object-cover" />
+        ) : embedUrl ? (
+          <div className="pointer-events-none h-full w-full" aria-hidden="true">
+            <RedgifsEmbed embedUrl={embedUrl} compact title="Náhled GIFu z RedGIFs" />
+          </div>
         ) : (
           <div className="grid h-full place-items-center p-2 text-center text-xs font-bold text-white/80">Náhled není dostupný</div>
         )}
@@ -3851,6 +3860,21 @@ function GifSearchCard({ gif, disabled, sending, onSelect }) {
       </div>
       {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex max-w-full items-center gap-1 text-[11px] font-bold text-gray-500 underline underline-offset-2 dark:text-gray-300">Zdroj: RedGIFs <ExternalLink size={11} /></a>}
     </div>
+  );
+}
+
+function RedgifsEmbed({ embedUrl, compact = false, title }) {
+  return (
+    <iframe
+      src={embedUrl}
+      title={title}
+      loading="lazy"
+      sandbox="allow-scripts allow-same-origin allow-presentation"
+      allow="autoplay; fullscreen; picture-in-picture"
+      allowFullScreen
+      referrerPolicy="no-referrer"
+      className={`aspect-video w-full border-0 bg-gray-950 ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`}
+    />
   );
 }
 

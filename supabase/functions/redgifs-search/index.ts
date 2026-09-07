@@ -89,6 +89,15 @@ function sanitizeGif(value: unknown) {
   };
 }
 
+function relevanceScore(gif: ReturnType<typeof sanitizeGif>, query: string) {
+  if (!gif) return -1;
+  const terms = query.toLocaleLowerCase().split(/[^a-z0-9áčďéěíňóřšťúůýž]+/i).filter(Boolean);
+  return terms.reduce((score, term) => score + gif.tags.reduce((tagScore, tag) => {
+    const normalizedTag = tag.toLocaleLowerCase();
+    return tagScore + (normalizedTag === term ? 5 : normalizedTag.includes(term) ? 2 : 0);
+  }, 0), 0);
+}
+
 async function fetchJson(url: string, init: RequestInit = {}) {
   const response = await fetch(url, {
     ...init,
@@ -167,7 +176,9 @@ serve(async (req) => {
 
     const searchUrl = new URL(`${REDGIFS_API_URL}/gifs/search`);
     searchUrl.searchParams.set("query", query);
+    searchUrl.searchParams.set("type", "gifs");
     searchUrl.searchParams.set("order", "score");
+    searchUrl.searchParams.set("page", "1");
     searchUrl.searchParams.set("count", String(count));
     const searchPayload = await fetchJson(searchUrl.toString(), {
       headers: {
@@ -181,6 +192,7 @@ serve(async (req) => {
     const results = (Array.isArray(searchPayload?.gifs) ? searchPayload.gifs : [])
       .map(sanitizeGif)
       .filter((gif): gif is NonNullable<ReturnType<typeof sanitizeGif>> => Boolean(gif))
+      .sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query))
       .slice(0, count);
 
     return jsonResponse({ results });
