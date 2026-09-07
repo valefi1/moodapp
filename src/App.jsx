@@ -37,6 +37,10 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import { PostMediaCard } from './components/media/MediaCards';
+import { DailyMomentGalleryArchive } from './features/moments/DailyMomentGalleryArchive';
+import { decryptSignedUrlToObjectUrl, encryptFileForCouple } from './lib/crypto';
+import { Card, EmptyState, PillButton, TextInput } from './components/ui/Primitives';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -423,58 +427,6 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-function bytesToBase64(bytes) {
-  let binary = '';
-  const view = new Uint8Array(bytes);
-  view.forEach((byte) => { binary += String.fromCharCode(byte); });
-  return btoa(binary);
-}
-
-function base64ToBytes(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-async function deriveEncryptionKey(passphrase, coupleId) {
-  const encoder = new TextEncoder();
-  const material = await crypto.subtle.importKey('raw', encoder.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: encoder.encode(`moodsync:${coupleId}`),
-      iterations: 250000,
-      hash: 'SHA-256',
-    },
-    material,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
-}
-
-async function encryptFileForCouple(file, coupleId, passphrase) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveEncryptionKey(passphrase, coupleId);
-  const encryptedBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await file.arrayBuffer());
-  return {
-    blob: new Blob([encryptedBuffer], { type: 'application/octet-stream' }),
-    iv: bytesToBase64(iv),
-    mimeType: file.type || 'image/jpeg',
-  };
-}
-
-async function decryptSignedUrlToObjectUrl(signedUrl, coupleId, passphrase, ivBase64, mimeType = 'image/jpeg') {
-  if (!signedUrl || !coupleId || !passphrase || !ivBase64) return null;
-  const response = await fetch(signedUrl);
-  if (!response.ok) throw new Error('Šifrovaný soubor se nepodařilo stáhnout.');
-  const encryptedBuffer = await response.arrayBuffer();
-  const key = await deriveEncryptionKey(passphrase, coupleId);
-  const decryptedBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: base64ToBytes(ivBase64) }, key, encryptedBuffer);
-  return URL.createObjectURL(new Blob([decryptedBuffer], { type: mimeType || 'image/jpeg' }));
-}
-
 function isIosDevice() {
   return /iphone|ipad|ipod/i.test(window.navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
@@ -769,32 +721,6 @@ function getSafeRedgifsSourceUrl(value, externalId = '') {
   return /^[a-z0-9]+$/i.test(externalId) ? `https://www.redgifs.com/watch/${externalId.toLowerCase()}` : null;
 }
 
-function Card({ children, className = '' }) {
-  return <section className={`box-border w-full max-w-full min-w-0 rounded-[1.5rem] border border-white/70 bg-white/85 p-4 shadow-xl backdrop-blur-xl dark:border-fuchsia-300/10 dark:bg-white/[0.07] dark:shadow-black/30 sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>;
-}
-
-function PillButton({ active, children, onClick }) {
-  return (
-    <button type="button" onClick={onClick} className={`rounded-2xl px-4 py-2 text-sm font-bold transition ${active ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20' : 'border border-gray-200 bg-white/80 hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15'}`}>
-      {children}
-    </button>
-  );
-}
-
-function TextInput(props) {
-  return <input {...props} className={`w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white ${props.className || ''}`} />;
-}
-
-function EmptyState({ title, text, icon: Icon = Sparkles }) {
-  return (
-    <div className="rounded-3xl border border-dashed border-pink-200 bg-pink-50/70 p-8 text-center dark:border-white/10 dark:bg-white/5">
-      <Icon className="mx-auto text-pink-500" size={34} />
-      <h3 className="mt-3 text-xl font-black">{title}</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-300">{text}</p>
-    </div>
-  );
-}
-
 export default function App() {
   const local = getLocalState();
   const [session, setSession] = useState(null);
@@ -988,7 +914,7 @@ export default function App() {
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadChallenges(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadPartnerDisplayName(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id), loadDailyMoments(activeCouple.id)]);
+        await Promise.all([loadChallenges(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadPartnerDisplayName(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -2398,13 +2324,17 @@ class AppErrorBoundary extends React.Component {
     }
   }
 
+  componentDidCatch(error, info) {
+    console.error('MoodSync section error:', error, info);
+  }
+
   render() {
     if (this.state.error) {
       return (
         <Card>
           <h2 className="flex items-center gap-2 text-2xl font-black"><AlertCircle className="text-red-500" /> Něco se nepodařilo načíst</h2>
           <p className="mt-2 text-gray-500 dark:text-gray-300">Sekce narazila na chybu místo bílé obrazovky. Zkus obnovit stránku; pokud chyba trvá, zkontroluj SQL migrace v Supabase.</p>
-          <pre className="mt-4 overflow-auto rounded-2xl bg-gray-900 p-4 text-xs text-white">{String(this.state.error?.message || this.state.error)}</pre>
+          <button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900">Obnovit aplikaci</button>
         </Card>
       );
     }
@@ -3704,62 +3634,6 @@ function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePo
   return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Deník páru</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Zprávy, nálady a fotky na jednom místě.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} openImage={openImage} deletePost={deletePost} />{hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} />}</Card>;
 }
 
-function DailyMomentGalleryArchive({ moments, currentUserId, openMoments }) {
-  const groups = Object.entries(moments.reduce((acc, moment) => {
-    const dateKey = moment.moment_date || String(moment.created_at || '').slice(0, 10) || 'unknown';
-    acc[dateKey] = [...(acc[dateKey] || []), moment];
-    return acc;
-  }, {})).sort(([first], [second]) => second.localeCompare(first));
-
-  return (
-    <section className="mb-6 rounded-3xl border border-fuchsia-200 bg-fuchsia-50/70 p-4 dark:border-fuchsia-400/20 dark:bg-fuchsia-500/10">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-xl font-black">Dnešní momenty</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-300">Archiv je seskupený podle dnů, aby galerie zůstala přehledná.</p>
-        </div>
-        <Heart className="shrink-0 text-pink-500" fill="currentColor" />
-      </div>
-      <div className="max-h-[720px] space-y-3 overflow-auto pr-1">
-        {groups.map(([dateKey, dayMoments], groupIndex) => (
-          <details key={dateKey} open={groupIndex === 0} className="overflow-hidden rounded-2xl border border-white/70 bg-white/70 dark:border-white/10 dark:bg-white/[0.06]">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-black">
-              <span>{dateKey === 'unknown' ? 'Bez data' : formatDate(`${dateKey}T12:00:00`)}</span>
-              <span className="rounded-full bg-fuchsia-100 px-2.5 py-1 text-xs text-fuchsia-700 dark:bg-fuchsia-500/20 dark:text-fuchsia-100">{dayMoments.length} {dayMoments.length === 1 ? 'moment' : 'momenty'}</span>
-            </summary>
-            <div className="grid gap-2 border-t border-fuchsia-100 p-2 sm:grid-cols-2 dark:border-white/10">
-              {dayMoments.map((moment) => {
-                const rating = moment.ratings?.find((item) => item.rater_id === currentUserId) || moment.ratings?.[0];
-                const isVideo = getStoredMomentMediaKind(moment) === 'video';
-                return (
-                  <article key={moment.id} className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-white/10 dark:bg-gray-950/50">
-                    <div className="relative h-40 bg-black">
-                      {moment.signedUrl
-                        ? isVideo
-                          ? <video src={moment.signedUrl} controls playsInline preload="metadata" className="h-full w-full object-contain" />
-                          : <img src={moment.signedUrl} alt={moment.caption || 'Dnešní moment'} loading="lazy" className="h-full w-full object-cover" />
-                        : <div className="grid h-full place-items-center p-4 text-center text-xs font-bold text-white">{moment.locked ? 'Šifrovaný moment' : 'Náhled není dostupný'}</div>}
-                      <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold text-white">{moment.author_id === currentUserId ? 'Ty' : 'Partner/ka'}</span>
-                    </div>
-                    <div className="p-3">
-                      <div className="flex items-center justify-between gap-2 text-xs font-bold text-gray-500 dark:text-gray-300">
-                        <span>{isVideo ? 'Video' : 'Fotka'} · {formatDate(moment.created_at)}</span>
-                        {rating ? <span aria-label={`${rating.score} z 5 srdcí`}>{'❤️'.repeat(rating.score)}</span> : <span>Bez hodnocení</span>}
-                      </div>
-                      {moment.caption && <p className="mt-1 line-clamp-2 text-sm font-bold">{moment.caption}</p>}
-                      <button type="button" onClick={openMoments} className="mt-2 text-xs font-black text-pink-600 underline underline-offset-2 dark:text-pink-200">Otevřít hodnocení</button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </details>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
   const showMoments = photoCategory === 'all' || photoCategory === 'moments';
   const visiblePosts = showMoments ? posts.filter((post) => !post.daily_moment_id) : posts;
@@ -3796,7 +3670,7 @@ function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, ad
 
       <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} />
       <GalleryUploadForm addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} />
-      {galleryMoments.length > 0 && <DailyMomentGalleryArchive moments={galleryMoments} currentUserId={currentUserId} openMoments={openMoments} />}
+      {galleryMoments.length > 0 && <DailyMomentGalleryArchive moments={galleryMoments} currentUserId={currentUserId} openMoments={openMoments} formatDate={formatDate} getStoredMomentMediaKind={getStoredMomentMediaKind} />}
       {(visiblePosts.length > 0 || galleryMoments.length === 0) && <FeedList posts={visiblePosts} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
       {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší fotky" />}
     </Card>
@@ -4024,77 +3898,6 @@ function RedgifsEmbed({ embedUrl, compact = false, title }) {
       referrerPolicy="no-referrer"
       className={`aspect-video w-full border-0 bg-gray-950 ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`}
     />
-  );
-}
-
-function MediaCard({ blurred, locked, loading, category, imageUrl, openImage, compact = false }) {
-  return (
-    <div className={`relative overflow-hidden border border-white/20 bg-gradient-to-br from-rose-500 via-fuchsia-500 to-purple-700 ${compact ? 'h-56 rounded-none md:h-72' : 'mt-4 h-72 rounded-3xl'}`}>
-      {imageUrl ? (
-        <button
-          type="button"
-          onClick={() => !blurred && openImage?.({ src: imageUrl, title: category })}
-          className="block h-full w-full"
-        >
-          <img
-            src={imageUrl}
-            alt={category}
-            loading="lazy"
-            decoding="async"
-            className={`h-full w-full object-cover transition ${blurred ? 'blur-sm scale-105' : 'hover:scale-105'}`}
-          />
-        </button>
-      ) : (
-        <div className={`grid h-full place-items-center p-5 text-center text-white ${loading ? 'animate-pulse' : ''}`}>
-          <div>
-            {loading ? <Image className="mx-auto mb-3" size={44} /> : <Lock className="mx-auto mb-3" size={44} />}
-            <div className="font-black">{loading ? 'Připravuju fotku…' : locked ? 'Šifrovaná fotka' : 'Fotka není dostupná'}</div>
-            {!loading && <p className="mt-2 text-sm text-white/80">{locked ? 'Zadej správné E2EE heslo v profilu.' : 'Zkus obnovit stránku.'}</p>}
-          </div>
-        </div>
-      )}
-      <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-        <span className="rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">Soukromá fotka</span>
-        <span className="rounded-full bg-pink-500 px-3 py-1 text-xs font-bold text-white">uloženo</span>
-        <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-bold text-white backdrop-blur">{category}</span>
-      </div>
-      {!blurred && imageUrl && (
-        <div className="absolute bottom-3 right-3 rounded-full bg-black/60 px-3 py-1 text-xs font-black text-white backdrop-blur">
-          Klikni pro fullscreen
-        </div>
-      )}
-      {blurred && <div className="absolute inset-0 grid place-items-center"><div className="rounded-2xl bg-black/60 px-5 py-3 font-bold text-white backdrop-blur-xl">Panic blur aktivní</div></div>}
-    </div>
-  );
-}
-
-function PostMediaCard({ post, locked, loading, blurred, category, openImage, compact = false }) {
-  const isVideo = post.media_kind === 'video' || String(post.media_mime_type || post.mime_type || '').startsWith('video/');
-  if (!isVideo) {
-    return <MediaCard imageUrl={post.signedUrl} locked={locked} loading={loading} blurred={blurred} category={category} openImage={openImage} compact={compact} />;
-  }
-
-  return (
-    <div className={`relative overflow-hidden border border-white/20 bg-gray-950 ${compact ? 'h-56 md:h-72' : 'mt-4 min-h-72 rounded-3xl'}`}>
-      {post.signedUrl ? (
-        <video
-          src={post.signedUrl}
-          controls
-          playsInline
-          preload="metadata"
-          className={`h-full min-h-72 w-full object-contain ${blurred ? 'blur-sm' : ''}`}
-        />
-      ) : (
-        <div className={`grid h-full min-h-72 place-items-center p-5 text-center text-white ${loading ? 'animate-pulse' : ''}`}>
-          <div>
-            {loading ? <Video className="mx-auto mb-3" size={44} /> : <Lock className="mx-auto mb-3" size={44} />}
-            <div className="font-black">{loading ? 'Připravuju video…' : locked ? 'Šifrované video' : 'Video není dostupné'}</div>
-            {!loading && <p className="mt-2 text-sm text-white/80">{locked ? 'Zadej správné E2EE heslo v profilu.' : 'Zkus obnovit stránku.'}</p>}
-          </div>
-        </div>
-      )}
-      <div className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white backdrop-blur">Dnešní moment</div>
-    </div>
   );
 }
 
