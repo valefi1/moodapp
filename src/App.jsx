@@ -3064,6 +3064,15 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
         </div>
       </Card>
 
+      <TodayFocusCard
+        hasMoment={dailyMoments.length > 0}
+        hasIncomingChallenge={Boolean(incomingChallenge)}
+        outgoingChallengeCount={outgoingCount}
+        partnerDayDone={Boolean(partnerDayCompletion || partnerDayAwardedByMe)}
+        openMoments={openMoments}
+        openChallenges={openChallenges}
+      />
+
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <DailyStatusCard sendDailyStatus={sendDailyStatus} />
         <EveningRitualCard completeEveningRitual={completeEveningRitual} posts={posts} />
@@ -3119,6 +3128,40 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
         </div>
       </details>
     </>
+  );
+}
+
+function TodayFocusCard({ hasMoment, hasIncomingChallenge, outgoingChallengeCount, partnerDayDone, openMoments, openChallenges }) {
+  const steps = [
+    { number: '1', label: 'Dnešní moment', detail: hasMoment ? 'Moment je připravený' : 'Ještě jste nic nepřidali', done: hasMoment, action: openMoments, actionLabel: hasMoment ? 'Otevřít' : 'Přidat' },
+    { number: '2', label: 'Malý skutek', detail: partnerDayDone ? 'Dnešní aktivita je uzavřená' : 'Jeden konkrétní skutek pro partnera', done: partnerDayDone, action: undefined, actionLabel: undefined },
+    { number: '3', label: 'Výzvy', detail: hasIncomingChallenge ? 'Čeká na tebe aktivní výzva' : outgoingChallengeCount > 0 ? `${outgoingChallengeCount} výzva čeká na partnera` : 'Žádná aktivní výzva', done: false, action: openChallenges, actionLabel: 'Zobrazit' },
+  ];
+
+  return (
+    <Card className="border-pink-200 bg-white/90 dark:border-white/10 dark:bg-white/[0.07]">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.16em] text-pink-500">Dnešní plán</div>
+          <h2 className="mt-1 text-2xl font-black">Co je teď důležité</h2>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-300">Nemusíte splnit všechno. Stačí jeden krok.</p>
+      </div>
+      <div className="mt-4 grid gap-2 lg:grid-cols-3">
+        {steps.map((step) => (
+          <div key={step.number} className={`rounded-2xl border p-3 ${step.done ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-400/30 dark:bg-emerald-400/10' : 'border-pink-100 bg-pink-50/70 dark:border-white/10 dark:bg-white/5'}`}>
+            <div className="flex items-start gap-3">
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${step.done ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{step.done ? '✓' : step.number}</span>
+              <div className="min-w-0">
+                <div className="font-black">{step.label}</div>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{step.detail}</div>
+                {step.action && <button type="button" onClick={step.action} className="mt-2 text-xs font-black text-pink-600 underline underline-offset-2 dark:text-pink-200">{step.actionLabel} →</button>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -3979,8 +4022,8 @@ function ChallengesPanel({ challenges = [], allChallenges = [], category, setCat
         <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1 text-sm font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200"><Trophy size={16} /> Výzvy 2.0</div>
-            <h2 className="mt-3 text-3xl font-black">Souboj partnerů</h2>
-            <p className="mt-2 text-gray-500 dark:text-gray-300">Vyzvěte partnera, nastavte časový limit a soutěžte o body. Nesplněná výzva vytvoří dluh, který musí partner smazat nápravnou odměnou.</p>
+            <h2 className="mt-3 text-3xl font-black">Výzvy a body</h2>
+            <p className="mt-2 text-gray-500 dark:text-gray-300">Vyberte aktivitu pro partnera, nastavte termín a po splnění ji potvrďte. Body jsou společná motivace, ne známka kvality vašeho vztahu.</p>
           </div>
           <div className="rounded-[2rem] bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 p-6 text-white shadow-xl">
             <div className="text-sm font-bold text-white/80">Žebříček</div>
@@ -3988,8 +4031,16 @@ function ChallengesPanel({ challenges = [], allChallenges = [], category, setCat
               <div className="rounded-2xl bg-white/15 p-4"><div className="text-xs font-bold text-white/70">Já</div><div className="text-4xl font-black">{safeStats.myXp}</div></div>
               <div className="rounded-2xl bg-white/15 p-4"><div className="text-xs font-bold text-white/70">Partner/ka</div><div className="text-4xl font-black">{safeStats.partnerXp}</div></div>
             </div>
-            <div className="mt-4 text-sm font-bold text-white/80">Dluh: Já {safeStats.myDebt} / Partner {safeStats.partnerDebt}</div>
+            <div className="mt-4 text-sm font-bold text-white/80">Dluh: Já {safeStats.myDebt} · Partner/ka {safeStats.partnerDebt}</div>
           </div>
+        </div>
+      </Card>
+
+      <Card className="border-purple-200 bg-purple-50/70 dark:border-purple-400/20 dark:bg-purple-500/10">
+        <div className="grid gap-3 text-sm sm:grid-cols-3">
+          <div><div className="font-black text-purple-700 dark:text-purple-200">1. Aktivita</div><p className="mt-1 text-gray-600 dark:text-gray-300">Co chcete společně udělat nebo komu chcete udělat radost.</p></div>
+          <div><div className="font-black text-purple-700 dark:text-purple-200">2. Potvrzení</div><p className="mt-1 text-gray-600 dark:text-gray-300">Člověk označí dokončení a druhý partner ho potvrdí.</p></div>
+          <div><div className="font-black text-purple-700 dark:text-purple-200">3. XP</div><p className="mt-1 text-gray-600 dark:text-gray-300">Body dostane ten, kdo úkol splnil. Nikdo si je nepřidává sám.</p></div>
         </div>
       </Card>
 
