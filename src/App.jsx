@@ -3802,6 +3802,7 @@ function GifMedia({ post, compact = false }) {
         <video
           src={post.gif_media_url}
           poster={post.gif_thumbnail_url || undefined}
+          referrerPolicy="no-referrer"
           width={width}
           height={height}
           controls
@@ -3815,9 +3816,9 @@ function GifMedia({ post, compact = false }) {
           Tvůj prohlížeč neumí přehrát toto video.
         </video>
       ) : !mediaImageFailed ? (
-        <img src={post.gif_media_url} alt="GIF z RedGIFs" loading="lazy" decoding="async" onError={() => setMediaImageFailed(true)} className={mediaClassName} />
+        <img src={post.gif_media_url} alt="GIF z RedGIFs" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setMediaImageFailed(true)} className={mediaClassName} />
       ) : !thumbnailFailed ? (
-        <img src={post.gif_thumbnail_url} alt="Náhled GIFu z RedGIFs" loading="lazy" decoding="async" onError={() => setThumbnailFailed(true)} className={mediaClassName} />
+        <img src={post.gif_thumbnail_url} alt="Náhled GIFu z RedGIFs" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className={mediaClassName} />
       ) : (
         <div className={`${mediaClassName} grid min-h-36 rounded-3xl place-items-center p-4 text-center text-sm font-bold text-white`}>GIF se nepodařilo načíst.</div>
       )}
@@ -3840,7 +3841,7 @@ function GifSearchCard({ gif, disabled, sending, onSelect }) {
     <div className="min-w-0">
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-gray-900 text-white">
         {!thumbnailFailed ? (
-          <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" decoding="async" onError={() => setThumbnailFailed(true)} className="h-full w-full object-cover" />
+          <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className="h-full w-full object-cover" />
         ) : (
           <div className="grid h-full place-items-center p-2 text-center text-xs font-bold text-white/80">Náhled není dostupný</div>
         )}
