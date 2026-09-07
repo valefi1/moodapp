@@ -21,10 +21,10 @@
 -- Call the function with header:
 -- x-cron-secret: your-long-random-secret
 --
--- Recommended schedule:
+-- Recommended schedule for the daily moment reminder:
 -- Supabase Dashboard -> Edge Functions -> mood-daily-reminder -> Schedule
--- Run once daily in the evening, e.g. 20:00 Europe/Prague.
--- If Supabase asks for UTC cron, use 18:00 UTC in summer and 19:00 UTC in winter,
--- or simply schedule around 19:00 UTC year-round.
+-- Run once daily at 10:30 Europe/Prague.
+-- If Supabase asks for UTC cron, use 30 8 * * * during CEST (summer),
+-- or 30 9 * * * during CET (winter).
 --
 -- You can also run it hourly; push_notification_log prevents duplicate daily/periodic nudges.

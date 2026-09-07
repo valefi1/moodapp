@@ -175,7 +175,7 @@ Používá se pro plánované připomínky:
 Doporučený schedule v Supabase Cron:
 
 ```text
-0 18 * * *
+30 8 * * *
 ```
 
 Požadavek musí být `POST` a obsahovat hlavičku:
@@ -184,7 +184,7 @@ Požadavek musí být `POST` a obsahovat hlavičku:
 x-cron-secret: hodnota_MOOD_REMINDER_SECRET
 ```
 
-V létě je to přibližně 20:00 Europe/Prague, protože Supabase Cron běží typicky v UTC.
+Toto je 10:30 Europe/Prague během letního času (CEST). V zimě je potřeba změnit cron na `30 9 * * *`, protože Supabase Cron běží typicky v UTC. Pokud tvůj Supabase scheduler podporuje časové pásmo, nastav přímo `Europe/Prague` a 10:30.
 
 ## Push notifikace na telefonech
 
