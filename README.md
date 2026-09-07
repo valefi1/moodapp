@@ -93,6 +93,16 @@ supabase/redgifs_setup.sql
 
 Soubor přidá do `public.posts` nullable metadata externího GIFu včetně oficiálního RedGIFs embed URL. Vyhledávání nejdřív používá thumbnail/poster a při nedostupnosti přímého média bezpečně přepne na oficiální `redgifs.com/ifr/...` embed; odkaz na zdroj zůstává u náhledu i odeslané zprávy. Neobsahuje žádné přihlašovací údaje. Načtení externího náhledu, videa nebo embedu ale navazuje spojení prohlížeče se službou RedGIFs, na které se vztahují její vlastní podmínky a zásady soukromí.
 
+### Storage pro soukromá média
+
+Před zapnutím galerie nebo Dnešního momentu spusť také:
+
+```sql
+supabase/storage_couple_media_setup.sql
+```
+
+Migrace vytvoří nebo ponechá bucket `couple-media` jako privátní a nastaví Storage policies podle prvního segmentu cesty `couple_id`. Každý člen páru může pracovat pouze s objekty vlastního páru. Ověř před spuštěním, že žádná starší politika bucketu neumožňuje veřejný přístup.
+
 ### Dnešní moment
 
 V Supabase SQL Editoru spusť:

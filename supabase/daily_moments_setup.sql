@@ -62,6 +62,26 @@ begin
       add constraint daily_moments_media_path_check
       check (media_path is not null or video_path is not null);
   end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.daily_moments'::regclass
+      and conname = 'daily_moments_video_mime_type_check'
+  ) then
+    alter table public.daily_moments
+      add constraint daily_moments_video_mime_type_check
+      check (video_mime_type in ('video/webm', 'video/mp4', 'video/quicktime', 'video/x-m4v')) not valid;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.daily_moments'::regclass
+      and conname = 'daily_moments_duration_check'
+  ) then
+    alter table public.daily_moments
+      add constraint daily_moments_duration_check
+      check (duration_seconds is null or (duration_seconds > 0 and duration_seconds <= 30)) not valid;
+  end if;
 end
 $$;
 

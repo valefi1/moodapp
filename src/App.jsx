@@ -160,7 +160,7 @@ const surpriseIdeas = [
 ];
 
 function getTodaySeed() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateKey();
   return today.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
@@ -252,7 +252,7 @@ function buildRelationshipHistory(posts, ownCloseness, partnerCloseness, ownHeat
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - index));
-    const key = date.toISOString().slice(0, 10);
+    const key = getLocalDateKey(date);
     const dayPosts = posts.filter((post) => String(post.created_at || '').startsWith(key));
     const moodPosts = dayPosts.filter((post) => post.type === 'mood');
     const activityBoost = Math.min(20, dayPosts.length * 4);
@@ -979,7 +979,6 @@ export default function App() {
       const { data: existingProfile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
       const userProfile = existingProfile || await createProfile();
       setProfile(userProfile);
-      setPartnerName(userProfile?.display_name || '');
 
       const { data: membership } = await supabase
         .from('couple_members')
@@ -989,10 +988,11 @@ export default function App() {
 
       const activeCouple = membership?.couples || null;
       setCouple(activeCouple);
+      setPartnerName('');
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadChallenges(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id), loadDailyMoments(activeCouple.id)]);
+        await Promise.all([loadChallenges(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadPartnerDisplayName(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id), loadDailyMoments(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -1162,6 +1162,21 @@ export default function App() {
     const { data, error } = await supabase.from('couple_members').select('*').eq('couple_id', coupleId);
     if (error) return setToast(error.message);
     setCoupleMembers(data || []);
+  }
+
+  async function loadPartnerDisplayName(coupleId) {
+    const { data: members } = await supabase
+      .from('couple_members')
+      .select('user_id')
+      .eq('couple_id', coupleId);
+    const partnerId = (members || []).map((member) => member.user_id).find((userId) => userId !== session?.user?.id);
+    if (!partnerId) return;
+    const { data: partnerProfile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', partnerId)
+      .maybeSingle();
+    setPartnerName(partnerProfile?.display_name || 'partner/ka');
   }
 
   async function loadDailyMoments(coupleId) {
@@ -2678,6 +2693,7 @@ function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments }) {
         <div className="min-w-0">
           <div className="inline-flex items-center gap-2 rounded-full bg-fuchsia-500 px-3 py-1 text-xs font-black text-white"><Video size={15} /> Dnešní moment</div>
           <h2 className="mt-3 text-2xl font-black">{getDailyMomentPrompt()}</h2>
+          <p className="mt-2 max-w-2xl text-xs text-gray-600 dark:text-gray-300">Fotky a videa vidí jen váš pár. Dnešní moment je uložený v privátním úložišti, ale na rozdíl od galerie není klientsky šifrovaný.</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
             <span className={`rounded-full px-3 py-1.5 ${ownStatus.className}`}>Ty: {loading ? 'Načítám…' : ownStatus.label}</span>
             <span className={`rounded-full px-3 py-1.5 ${partnerStatus.className}`}>Partner/ka: {loading ? 'Načítám…' : partnerStatus.label}</span>
