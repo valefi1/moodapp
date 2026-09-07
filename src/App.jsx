@@ -4231,14 +4231,15 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-sm font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200"><Heart size={16} /> Kamasutra 2.0</div>
             <h2 className="mt-3 text-3xl font-black sm:text-4xl">Kamasutra Journey</h2>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">50 různorodých neanálních pozic, vyhledávání podle názvu nebo popisu, filtry, ověřené odkazy na Lovino.cz a nově i stav „chci zkusit / oblíbené / ne pro nás“.</p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">Společný seznam inspirace. Nejprve si vyberte, co vás zajímá, a instrukce otevřete až u konkrétní polohy.</p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
               <span className="rounded-full bg-pink-100 px-3 py-1 text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">Chci zkusit: {wantToTry}</span>
               <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">Oblíbené: {favorites}</span>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200">Vyzkoušeno společně: {completed}</span>
             </div>
           </div>
           <div className="rounded-[2rem] bg-gradient-to-br from-pink-500 via-rose-500 to-purple-600 p-5 text-white shadow-2xl">
-            <div className="text-xs font-bold text-white/80">Splněno</div>
+            <div className="text-xs font-bold text-white/80">Společně vyzkoušeno</div>
             <div className="text-5xl font-black">{completed}</div>
             <div className="text-sm font-bold text-white/80">z {kamaPositions.length}</div>
             <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/20"><div className="h-full rounded-full bg-white" style={{ width: `${progress}%` }} /></div>
@@ -4273,7 +4274,7 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
       {filtered.length === 0 ? (
         <EmptyState title="Žádná poloha nenalezena" text="Zkuste kratší výraz, jiný typ nebo vypnout některý filtr." icon={Search} />
       ) : (
-        <section className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
           {filtered.map((position) => {
             const item = progressById[position.id];
             const lovinoUrl = createLovinoKamasutraUrl(position);
@@ -4287,11 +4288,14 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
                     <span className="rounded-full bg-pink-100 px-2 py-1 text-[9px] font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200 sm:text-[10px]">{position.type}</span>
                     <span className="rounded-full bg-purple-100 px-2 py-1 text-[9px] font-black text-purple-700 dark:bg-purple-500/20 dark:text-purple-200 sm:text-[10px]">{position.difficulty}</span>
                   </div>
-                  <div className="mt-3 space-y-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm">
-                    <InstructionBlock title="Nastavení" text={position.description.setup} />
-                    <InstructionBlock title="Pohyb a tempo" text={position.description.focus} />
-                    <InstructionBlock title="Komfort" text={position.description.comfort} />
-                  </div>
+                  <details className="mt-3 rounded-2xl border border-pink-100/70 bg-white/80 p-3 dark:border-white/10 dark:bg-white/[0.06]">
+                    <summary className="cursor-pointer list-none text-xs font-black text-pink-700 dark:text-pink-200">Jak na to <span className="float-right">Rozbalit</span></summary>
+                    <div className="mt-3 space-y-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-300 sm:text-sm">
+                      <InstructionBlock title="Nastavení" text={position.description.setup} />
+                      <InstructionBlock title="Pohyb a tempo" text={position.description.focus} />
+                      <InstructionBlock title="Komfort" text={position.description.comfort} />
+                    </div>
+                  </details>
                   <a href={lovinoUrl} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-pink-50 px-2 py-2 text-center text-[10px] font-black text-pink-700 transition hover:bg-pink-100 dark:border-pink-500/30 dark:bg-pink-500/10 dark:text-pink-200 sm:text-xs">
                     <ExternalLink size={14} /> {hasLovinoPositionUrl ? 'Zobrazit polohu na Lovino.cz' : 'Otevřít Kamasutru na Lovino.cz'}
                   </a>
@@ -4318,7 +4322,7 @@ function KamasutraPanel({ kamaProgress, kamaFilter, setKamaFilter, kamaSearch, s
                   >
                     {item?.desire_status === 'no' ? 'Označeno: ne pro nás' : 'Ne pro nás'}
                   </button>
-                  <button onClick={() => toggleKama(position.id)} className={`mt-2 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Vyzkoušeno' : 'Označit jako vyzkoušené'}</button>
+                  <button onClick={() => toggleKama(position.id)} className={`mt-2 w-full rounded-2xl py-2 text-xs font-black transition sm:text-sm ${item?.completed ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'}`}>{item?.completed ? '✓ Společně vyzkoušeno' : 'Označit jako společně vyzkoušené'}</button>
                   {encryptionReady ? (
                     <label className="mt-2 flex cursor-pointer items-center justify-center rounded-2xl border-2 border-dashed border-pink-300 px-2 py-2.5 text-center text-[10px] font-bold text-pink-600 hover:bg-pink-100 dark:border-pink-500/30 dark:text-pink-200 sm:text-[11px]">
                       <input
