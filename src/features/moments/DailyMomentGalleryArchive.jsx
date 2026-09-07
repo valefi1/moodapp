@@ -1,6 +1,6 @@
-import { Heart } from 'lucide-react';
+import { Eye, Heart } from 'lucide-react';
 
-export function DailyMomentGalleryArchive({ moments, currentUserId, openMoments, formatDate, getStoredMomentMediaKind }) {
+export function DailyMomentGalleryArchive({ moments, currentUserId, panicMode, openMoments, formatDate, getStoredMomentMediaKind }) {
   const groups = Object.entries(moments.reduce((acc, moment) => {
     const dateKey = moment.moment_date || String(moment.created_at || '').slice(0, 10) || 'unknown';
     acc[dateKey] = [...(acc[dateKey] || []), moment];
@@ -27,14 +27,16 @@ export function DailyMomentGalleryArchive({ moments, currentUserId, openMoments,
               {dayMoments.map((moment) => {
                 const rating = moment.ratings?.find((item) => item.rater_id === currentUserId) || moment.ratings?.[0];
                 const isVideo = getStoredMomentMediaKind(moment) === 'video';
+                const blurred = Boolean(panicMode);
                 return (
                   <article key={moment.id} className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-white/10 dark:bg-gray-950/50">
                     <div className="relative h-40 bg-black">
                       {moment.signedUrl
                         ? isVideo
-                          ? <video src={moment.signedUrl} controls playsInline preload="metadata" className="h-full w-full object-contain" />
-                          : <img src={moment.signedUrl} alt={moment.caption || 'Dnešní moment'} loading="lazy" className="h-full w-full object-cover" />
+                          ? <video src={moment.signedUrl} controls={!blurred} playsInline preload="metadata" className={`h-full w-full object-contain ${blurred ? 'scale-110 blur-2xl' : ''}`} />
+                          : <img src={moment.signedUrl} alt={moment.caption || 'Dnešní moment'} loading="lazy" className={`h-full w-full object-cover ${blurred ? 'scale-110 blur-2xl' : ''}`} />
                         : <div className="grid h-full place-items-center p-4 text-center text-xs font-bold text-white">{moment.locked ? 'Šifrovaný moment' : 'Náhled není dostupný'}</div>}
+                      {blurred && moment.signedUrl && <button type="button" onClick={openMoments} className="absolute inset-0 grid place-items-center bg-black/25 text-white" aria-label="Odemknout náhled v sekci Dnešní momenty"><span className="rounded-xl bg-black/70 px-3 py-2 text-xs font-black"><Eye className="mx-auto mb-1" size={16} />Otevřít moment</span></button>}
                       <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-1 text-[11px] font-bold text-white">{moment.author_id === currentUserId ? 'Ty' : 'Partner/ka'}</span>
                     </div>
                     <div className="p-3">

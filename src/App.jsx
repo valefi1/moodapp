@@ -12,6 +12,7 @@ import {
   Clock,
   Dice5,
   ExternalLink,
+  Eye,
   Flame,
   Gift,
   Heart,
@@ -2304,7 +2305,7 @@ export default function App() {
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} dailyMoments={dailyMoments} currentUserId={session?.user?.id} openMoments={() => setActiveTab('moments')} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
             {activeTab === 'more' && <MorePanel setActiveTab={setActiveTab} />}
-            {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={dailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
+            {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={dailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} panicMode={panicMode} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
             {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} profileName={profileName} setProfileName={setProfileName} updateProfileName={updateProfileName} partnerName={partnerName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
@@ -2709,7 +2710,7 @@ function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments, pri
   );
 }
 
-function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId, uploadMoment, deleteMoment, saveRating }) {
+function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId, panicMode, uploadMoment, deleteMoment, saveRating }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedDuration, setSelectedDuration] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -2913,15 +2914,15 @@ function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId,
       {loading && <div role="status" className="rounded-2xl bg-white/70 p-4 text-center font-bold text-pink-600 dark:bg-white/10 dark:text-pink-200">Načítám dnešní momenty…</div>}
       {!loading && couple && (
         <section className="grid gap-4 lg:grid-cols-2">
-          <DailyMomentCard key={`own-${ownMoment?.id || 'missing'}-${ownMoment?.ratings?.map((rating) => `${rating.id}:${rating.score}:${rating.reaction}`).join('|') || ''}`} label="Tvůj moment" moment={ownMoment} otherMoment={partnerMoment} own currentUserId={currentUserId} deleteMoment={deleteMoment} />
-          <DailyMomentCard key={`partner-${partnerMoment?.id || 'missing'}-${partnerMoment?.ratings?.map((rating) => `${rating.id}:${rating.score}:${rating.reaction}`).join('|') || ''}`} label="Moment partnera/partnerky" moment={partnerMoment} otherMoment={ownMoment} currentUserId={currentUserId} saveRating={saveRating} />
+          <DailyMomentCard key={`own-${ownMoment?.id || 'missing'}-${ownMoment?.ratings?.map((rating) => `${rating.id}:${rating.score}:${rating.reaction}`).join('|') || ''}`} label="Tvůj moment" moment={ownMoment} otherMoment={partnerMoment} own currentUserId={currentUserId} panicMode={panicMode} deleteMoment={deleteMoment} />
+          <DailyMomentCard key={`partner-${partnerMoment?.id || 'missing'}-${partnerMoment?.ratings?.map((rating) => `${rating.id}:${rating.score}:${rating.reaction}`).join('|') || ''}`} label="Moment partnera/partnerky" moment={partnerMoment} otherMoment={ownMoment} currentUserId={currentUserId} panicMode={panicMode} saveRating={saveRating} />
         </section>
       )}
     </div>
   );
 }
 
-function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserId, deleteMoment, saveRating }) {
+function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserId, panicMode, deleteMoment, saveRating }) {
   const existingRating = own
     ? moment?.ratings?.[0] || null
     : moment?.ratings?.find((rating) => rating.rater_id === currentUserId) || null;
@@ -2930,7 +2931,9 @@ function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserI
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
+  const [revealed, setRevealed] = useState(false);
   const status = getMomentStatus(moment, otherMoment);
+  const mediaBlurred = Boolean(panicMode && !revealed);
 
   async function handleRatingSave() {
     setSaving(true);
@@ -2970,9 +2973,15 @@ function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserI
       ) : (
         <>
           {moment.signedUrl
-            ? getStoredMomentMediaKind(moment) === 'image'
-              ? <img src={moment.signedUrl} alt={moment.caption || 'Dnešní moment'} loading="lazy" decoding="async" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" />
-              : <video src={moment.signedUrl} controls playsInline preload="metadata" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" />
+            ? <div className="relative mt-4 overflow-hidden rounded-3xl bg-black">
+                {getStoredMomentMediaKind(moment) === 'image'
+                  ? <img src={moment.signedUrl} alt={moment.caption || 'Dnešní moment'} loading="lazy" decoding="async" className={`max-h-[34rem] w-full object-contain transition duration-500 ${mediaBlurred ? 'scale-105 blur-2xl' : ''}`} />
+                  : <video src={moment.signedUrl} controls={!mediaBlurred} playsInline preload="metadata" className={`max-h-[34rem] w-full object-contain transition duration-500 ${mediaBlurred ? 'scale-105 blur-2xl' : ''}`} />}
+                {mediaBlurred && <button type="button" onClick={() => setRevealed(true)} className="absolute inset-0 grid place-items-center bg-black/25 p-4 text-center text-white backdrop-blur-sm" aria-label="Odemknout náhled dnešního momentu">
+                  <span className="rounded-2xl bg-black/65 px-5 py-3 text-sm font-black shadow-xl"><Eye className="mx-auto mb-1" size={20} />Klepnutím zobrazit moment</span>
+                </button>}
+                {!mediaBlurred && panicMode && <button type="button" onClick={() => setRevealed(false)} className="absolute right-3 top-3 rounded-xl bg-black/65 px-3 py-2 text-xs font-black text-white" aria-label="Znovu rozmazat náhled">Rozmazat</button>}
+              </div>
             : <div className="mt-4 rounded-3xl bg-gray-100 p-8 text-center text-sm font-bold dark:bg-white/10">{moment.locked ? 'Toto médium je šifrované. Nastav stejné E2EE heslo v profilu.' : 'Podepsaný odkaz na médium se nepodařilo vytvořit.'}</div>}
           <div className="mt-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -3691,7 +3700,7 @@ function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, ad
 
       <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} />
       <GalleryUploadForm addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} />
-      {galleryMoments.length > 0 && <DailyMomentGalleryArchive moments={galleryMoments} currentUserId={currentUserId} openMoments={openMoments} formatDate={formatDate} getStoredMomentMediaKind={getStoredMomentMediaKind} />}
+      {galleryMoments.length > 0 && <DailyMomentGalleryArchive moments={galleryMoments} currentUserId={currentUserId} panicMode={panicMode} openMoments={openMoments} formatDate={formatDate} getStoredMomentMediaKind={getStoredMomentMediaKind} />}
       {(visiblePosts.length > 0 || galleryMoments.length === 0) && <FeedList posts={visiblePosts} currentUserId={currentUserId} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
       {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší fotky" />}
     </Card>
