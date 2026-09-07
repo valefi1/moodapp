@@ -133,13 +133,13 @@ const eveningRitualItems = [
 const chatReactions = ['❤️', '🔥', '🥺', '😘', '🤗', '😂'];
 
 const dailyMomentPrompts = [
-  'Co ti dnes udělalo radost?',
-  'Jak vypadá tvůj dnešní moment?',
-  'Ukaž jednu malou věc ze svého dne.',
-  'Co by sis z dneška chtěl/a zapamatovat?',
-  'Kde se právě teď cítíš dobře?',
-  'Jaká maličkost dnes stojí za sdílení?',
-  'Co dnes vidíš kolem sebe?',
+  'Potěš mě něč hezkým, co mi dnes chceš ukázat.',
+  'Vzruš mě pohledem, úsměvem nebo krátkým vzkazem.',
+  'Ukaž mi, jak bys mě dnes chtěl/a nalákat k sobě.',
+  'Pošli mi malý tajný moment jen pro mě.',
+  'Co bys mi dnes udělal/a, kdybych byl/a právě vedle tebe?',
+  'Navnadíš mě na naše příští společné chvíle?',
+  'Ukaž mi svou dnešní nejvíc sexy náladu.',
 ];
 
 const supportedMomentMimeTypes = new Set(['video/webm', 'video/mp4', 'video/quicktime', 'video/x-m4v']);
