@@ -91,7 +91,7 @@ V Supabase SQL Editoru spusť:
 supabase/redgifs_setup.sql
 ```
 
-Soubor přidá do `public.posts` nullable metadata externího GIFu. Neobsahuje žádné přihlašovací údaje.
+Soubor přidá do `public.posts` nullable metadata externího GIFu včetně oficiálního RedGIFs embed URL. Vyhledávání nejdřív používá thumbnail/poster a při nedostupnosti přímého média bezpečně přepne na oficiální `redgifs.com/ifr/...` embed; odkaz na zdroj zůstává u náhledu i odeslané zprávy. Neobsahuje žádné přihlašovací údaje. Načtení externího náhledu, videa nebo embedu ale navazuje spojení prohlížeče se službou RedGIFs, na které se vztahují její vlastní podmínky a zásady soukromí.
 
 ### Dnešní moment
 
@@ -101,9 +101,9 @@ V Supabase SQL Editoru spusť:
 supabase/daily_moments_setup.sql
 ```
 
-Soubor vytvoří tabulky pro denní videa a partnerská hodnocení včetně indexů a RLS pravidel. Funkce používá existující privátní bucket `couple-media`; nový Edge Function ani změna `supabase/config.toml` nejsou potřeba.
+Soubor vytvoří nebo zpětně kompatibilně rozšíří tabulky pro denní fotografie či krátká videa a partnerská hodnocení včetně indexů a RLS pravidel. Staré řádky ve `video_path` zůstávají funkční a obecná media metadata se při migraci doplní. Funkce používá existující privátní bucket `couple-media`; nový Edge Function ani změna `supabase/config.toml` nejsou potřeba.
 
-Video je v Supabase Storage uložené privátně a aplikace ho přehrává přes krátkodobý podepsaný odkaz. Videa Dnešního momentu zatím nejsou šifrovaná klientským E2EE, takže provozovatel Supabase projektu k nim může mít technický přístup.
+Fotka může mít nejvýše 15 MB; video nejvýše 25 MB a 30 sekund. Média jsou v Supabase Storage uložená v privátní cestě páru a aplikace je načítá přes krátkodobý podepsaný odkaz. Média Dnešního momentu zatím nejsou šifrovaná klientským E2EE, takže k nim může mít provozovatel Supabase projektu technický přístup. Přístup přes aplikaci a databázové RLS je omezený na členy daného páru.
 
 ### Scheduled engagement reminders
 
@@ -138,7 +138,7 @@ Po aplikování `supabase/redgifs_setup.sql` nasaď funkci:
 supabase functions deploy redgifs-search
 ```
 
-Funkce vyžaduje platný Supabase JWT a ověřuje členství v páru. Do prohlížeče posílá jen sanitizované údaje výsledků; dočasný RedGIFs token i `SUPABASE_SERVICE_ROLE_KEY` zůstávají pouze na serveru. RedGIFs přihlašovací údaje se nenastavují ani nevkládají do `VITE_*` proměnných.
+Funkce vyžaduje platný Supabase JWT a ověřuje členství v páru. Do prohlížeče posílá jen sanitizované údaje výsledků; embed URL přijímá pouze z `redgifs.com` nebo `www.redgifs.com`. Dočasný RedGIFs token i `SUPABASE_SERVICE_ROLE_KEY` zůstávají pouze na serveru. RedGIFs přihlašovací údaje se nenastavují ani nevkládají do `VITE_*` proměnných.
 
 ### send-push-notification
 
