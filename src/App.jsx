@@ -3768,7 +3768,7 @@ function PhotoUploadButton({ addPhoto, encryptionReady, onMissingE2EE }) {
 function FeedList({ posts, currentUserId, panicMode, galleryOnly = false, openImage, deletePost }) {
   if (posts.length === 0) return <EmptyState title="Zatím tu nic není" text={galleryOnly ? 'Nahrajte první společnou fotku.' : 'Pošlete první zprávu, náladu nebo fotku.'} icon={galleryOnly ? Image : MessageCircle} />;
   return (
-    <div className={galleryOnly ? 'grid max-h-[760px] grid-cols-2 gap-2 overflow-auto pr-1 sm:gap-4' : 'max-h-[650px] space-y-4 overflow-auto pr-1'}>
+    <div className={galleryOnly ? 'grid max-h-[760px] grid-cols-1 gap-3 overflow-auto pb-[calc(5rem+env(safe-area-inset-bottom))] pr-1 sm:grid-cols-2 sm:gap-4' : 'max-h-[650px] space-y-4 overflow-auto pr-1'}>
       {posts.map((post) => (
         <article
           key={post.id}
@@ -3778,12 +3778,12 @@ function FeedList({ posts, currentUserId, panicMode, galleryOnly = false, openIm
             <>
               <PostMediaCard post={post} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} compact />
               <div className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                  <div className="min-w-0">
                     <div className="text-sm font-black">{photoCategories.find((category) => category.id === post.photo_category)?.label || 'Fotka'}</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
                   </div>
-                  {post.author_id === currentUserId && <button type="button" onClick={() => deletePost?.(post)} className="rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white">Smazat</button>}
+                  {post.author_id === currentUserId && <button type="button" onClick={() => deletePost?.(post)} className="self-start rounded-xl bg-red-500 px-3 py-2 text-xs font-black text-white sm:shrink-0">Smazat</button>}
                 </div>
                 <p className="mt-3 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">{post.text}</p>
               </div>

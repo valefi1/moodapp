@@ -36,7 +36,7 @@ export function MediaCard({ blurred, locked, loading, category, imageUrl, openIm
           Klikni pro fullscreen
         </div>
       )}
-      {blurred && <div className="absolute inset-0 grid place-items-center"><div className="rounded-2xl bg-black/60 px-5 py-3 font-bold text-white backdrop-blur-xl">Panic blur aktivní</div></div>}
+      {blurred && <div className="absolute inset-0 grid place-items-center"><div className="rounded-xl bg-black/60 px-3 py-2 text-xs font-bold text-white backdrop-blur-xl sm:px-5 sm:py-3 sm:text-base">{compact ? 'Skryto' : 'Panic blur aktivní'}</div></div>}
     </div>
   );
 }
