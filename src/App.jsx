@@ -3793,6 +3793,8 @@ function GifMedia({ post, compact = false }) {
   const width = Number.isInteger(post.gif_width) && post.gif_width > 0 ? post.gif_width : undefined;
   const height = Number.isInteger(post.gif_height) && post.gif_height > 0 ? post.gif_height : undefined;
   const duration = typeof post.gif_duration === 'number' && Number.isFinite(post.gif_duration) ? Math.round(post.gif_duration) : null;
+  const embedUrl = getSafeRedgifsEmbedUrl(post.gif_embed_url)
+    || (/^[a-z0-9]+$/i.test(post.gif_external_id || '') ? `https://www.redgifs.com/ifr/${post.gif_external_id.toLowerCase()}` : null);
   const sourceUrl = getSafeRedgifsSourceUrl(post.gif_source_url, post.gif_external_id);
   const mediaClassName = `w-full bg-gray-950 object-contain ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`;
 
@@ -3818,10 +3820,10 @@ function GifMedia({ post, compact = false }) {
         <img src={post.gif_media_url} alt="GIF z RedGIFs" loading="lazy" decoding="async" onError={() => setMediaImageFailed(true)} className={mediaClassName} />
       ) : !thumbnailFailed ? (
         <img src={post.gif_thumbnail_url} alt="Náhled GIFu z RedGIFs" loading="lazy" decoding="async" onError={() => setThumbnailFailed(true)} className={mediaClassName} />
+      ) : embedUrl ? (
+        <RedgifsEmbed embedUrl={embedUrl} compact={compact} title="GIF z RedGIFs" />
       ) : (
-        <div className={`${mediaClassName} grid min-h-36 place-items-center p-4 text-center text-sm font-bold text-white`}>
-          {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">Otevřít GIF na RedGIFs</a> : 'GIF se nepodařilo načíst.'}
-        </div>
+        <div className={`${mediaClassName} grid min-h-36 place-items-center p-4 text-center text-sm font-bold text-white`}>GIF se nepodařilo načíst.</div>
       )}
       <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs ${compact ? 'text-current opacity-80' : 'text-gray-500 dark:text-gray-300'}`}>
         {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold underline underline-offset-2">
@@ -3833,8 +3835,24 @@ function GifMedia({ post, compact = false }) {
   );
 }
 
+function RedgifsEmbed({ embedUrl, compact = false, title }) {
+  return (
+    <iframe
+      src={embedUrl}
+      title={title}
+      loading="lazy"
+      sandbox="allow-scripts allow-same-origin allow-presentation"
+      allow="autoplay; fullscreen; picture-in-picture"
+      allowFullScreen
+      referrerPolicy="no-referrer"
+      className={`aspect-video w-full border-0 bg-gray-950 ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`}
+    />
+  );
+}
+
 function GifSearchCard({ gif, disabled, sending, onSelect }) {
   const [thumbnailFailed, setThumbnailFailed] = useState(!gif.thumbnailUrl);
+  const embedUrl = getSafeRedgifsEmbedUrl(gif.embedUrl);
   const sourceUrl = getSafeRedgifsSourceUrl(gif.sourceUrl, gif.externalId);
 
   return (
@@ -3842,8 +3860,12 @@ function GifSearchCard({ gif, disabled, sending, onSelect }) {
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-gray-900 text-white">
         {!thumbnailFailed ? (
           <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" decoding="async" onError={() => setThumbnailFailed(true)} className="h-full w-full object-cover" />
+        ) : embedUrl ? (
+          <div className="pointer-events-none h-full w-full" aria-hidden="true">
+            <RedgifsEmbed embedUrl={embedUrl} compact title="Náhled GIFu z RedGIFs" />
+          </div>
         ) : (
-          <div className="grid h-full place-items-center p-2 text-center text-xs font-bold text-white/80">Náhled z API není dostupný</div>
+          <div className="grid h-full place-items-center p-2 text-center text-xs font-bold text-white/80">Náhled není dostupný</div>
         )}
         <button type="button" disabled={disabled} onClick={() => onSelect(gif)} className="absolute inset-0 z-10 bg-transparent ring-inset transition hover:ring-4 hover:ring-pink-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white disabled:opacity-60" aria-label="Odeslat vybraný GIF">
           {sending && <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-black">Odesílám…</span>}
