@@ -176,7 +176,6 @@ serve(async (req) => {
 
     const searchUrl = new URL(`${REDGIFS_API_URL}/gifs/search`);
     searchUrl.searchParams.set("query", query);
-    searchUrl.searchParams.set("type", "gifs");
     searchUrl.searchParams.set("order", "score");
     searchUrl.searchParams.set("page", "1");
     searchUrl.searchParams.set("count", String(count));
