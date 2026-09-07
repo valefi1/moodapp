@@ -83,6 +83,28 @@ supabase/e2ee_media_setup.sql
 
 Přidává metadata pro šifrované fotky ve Feed/Gallery/Kamasutra a profilovou fotku páru.
 
+### RedGIF zprávy
+
+V Supabase SQL Editoru spusť:
+
+```sql
+supabase/redgifs_setup.sql
+```
+
+Soubor přidá do `public.posts` nullable metadata externího GIFu. Neobsahuje žádné přihlašovací údaje.
+
+### Dnešní moment
+
+V Supabase SQL Editoru spusť:
+
+```sql
+supabase/daily_moments_setup.sql
+```
+
+Soubor vytvoří tabulky pro denní videa a partnerská hodnocení včetně indexů a RLS pravidel. Funkce používá existující privátní bucket `couple-media`; nový Edge Function ani změna `supabase/config.toml` nejsou potřeba.
+
+Video je v Supabase Storage uložené privátně a aplikace ho přehrává přes krátkodobý podepsaný odkaz. Videa Dnešního momentu zatím nejsou šifrovaná klientským E2EE, takže provozovatel Supabase projektu k nim může mít technický přístup.
+
 ### Scheduled engagement reminders
 
 ```sql
@@ -107,6 +129,16 @@ Vyzkoušeno
 ```
 
 ## Edge Functions
+
+### redgifs-search
+
+Po aplikování `supabase/redgifs_setup.sql` nasaď funkci:
+
+```bash
+supabase functions deploy redgifs-search
+```
+
+Funkce vyžaduje platný Supabase JWT a ověřuje členství v páru. Do prohlížeče posílá jen sanitizované údaje výsledků; dočasný RedGIFs token i `SUPABASE_SERVICE_ROLE_KEY` zůstávají pouze na serveru. RedGIFs přihlašovací údaje se nenastavují ani nevkládají do `VITE_*` proměnných.
 
 ### send-push-notification
 
