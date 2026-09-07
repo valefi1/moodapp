@@ -3808,6 +3808,7 @@ function GifMedia({ post, compact = false }) {
           width={width}
           height={height}
           controls
+          autoPlay
           muted
           loop
           playsInline
@@ -3838,6 +3839,7 @@ function GifMedia({ post, compact = false }) {
 
 
 function GifSearchCard({ gif, disabled, sending, onSelect }) {
+  const [videoFailed, setVideoFailed] = useState(!gif.mediaUrl);
   const [thumbnailFailed, setThumbnailFailed] = useState(!gif.thumbnailUrl);
   const embedUrl = getSafeRedgifsEmbedUrl(gif.embedUrl);
   const sourceUrl = getSafeRedgifsSourceUrl(gif.sourceUrl, gif.externalId);
@@ -3845,7 +3847,20 @@ function GifSearchCard({ gif, disabled, sending, onSelect }) {
   return (
     <div className="min-w-0">
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-gray-900 text-white">
-        {!thumbnailFailed ? (
+        {!videoFailed ? (
+          <video
+            src={gif.mediaUrl}
+            poster={gif.thumbnailUrl || undefined}
+            referrerPolicy="no-referrer"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            onError={() => setVideoFailed(true)}
+            className="h-full w-full object-cover"
+          />
+        ) : !thumbnailFailed ? (
           <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className="h-full w-full object-cover" />
         ) : embedUrl ? (
           <div className="pointer-events-none h-full w-full" aria-hidden="true">
