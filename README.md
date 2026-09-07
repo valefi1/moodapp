@@ -111,7 +111,7 @@ Fotka může mít nejvýše 15 MB; video nejvýše 25 MB a 30 sekund. Média jso
 supabase/engagement_reminders_setup.sql
 ```
 
-Přidává log poslaných připomínek, aby cron neposílal stejné připomínky opakovaně.
+Přidává log poslaných připomínek, aby cron neposílal stejné připomínky opakovaně. Scheduler `mood-daily-reminder` nyní posílá také denní připomínku Dnešního momentu, pokud uživatel ještě neposlal dnešní fotku ani video.
 
 ### Kamasutra upgrade
 

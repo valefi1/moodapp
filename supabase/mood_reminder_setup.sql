@@ -1,9 +1,10 @@
 -- MoodSync scheduled reminders
 --
 -- What this function sends:
--- 1) Daily thermometer reminder: once per user per Prague day if the user has not updated the thermometer/status today.
--- 2) 48h inactivity nudge: if the user has not updated status and has not posted anything for ~48h.
--- 3) 72h quiet-couple nudge: if the couple feed/chat has been quiet for ~72h.
+-- 1) Daily moment reminder: once per user per Prague day if no photo/video was uploaded.
+-- 2) Daily thermometer reminder: once per user per Prague day if the user has not updated the thermometer/status today.
+-- 3) 48h inactivity nudge: if the user has not updated status and has not posted anything for ~48h.
+-- 4) 72h quiet-couple nudge: if the couple feed/chat has been quiet for ~72h.
 --
 -- Required first:
 -- 1) Run supabase/engagement_reminders_setup.sql in Supabase SQL Editor.

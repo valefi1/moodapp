@@ -152,13 +152,34 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
+      const { data: todaysMoment } = await supabase
+        .from("daily_moments")
+        .select("id")
+        .eq("couple_id", sub.couple_id)
+        .eq("author_id", sub.user_id)
+        .eq("moment_date", todayKey)
+        .maybeSingle();
+
       const thermometerFilledToday = isSamePragueDay(status?.updated_at, todayKey);
+      const momentUploadedToday = Boolean(todaysMoment?.id);
       const ownInactive48h = isOlderThan(status?.updated_at, 48) && isOlderThan(lastOwnPost?.created_at, 48);
       const coupleQuiet72h = isOlderThan(lastCouplePost?.created_at, 72);
 
       let candidate: null | { eventType: string; periodKey: string; payload: Record<string, unknown>; options?: Record<string, unknown> } = null;
 
-      if (!thermometerFilledToday) {
+      if (!momentUploadedToday) {
+        candidate = {
+          eventType: "daily_moment_reminder",
+          periodKey: todayKey,
+          payload: {
+            title: "MoodSync Dnešní moment",
+            body: "Potěš a vzruš svého partnera nebo partnerku — pošli dnešní fotku či krátké video.",
+            url: "/?tab=moments",
+            tag: "daily-moment-reminder",
+          },
+          options: { TTL: 60 * 60 * 12, urgency: "normal" },
+        };
+      } else if (!thermometerFilledToday) {
         candidate = {
           eventType: "daily_thermometer_reminder",
           periodKey: todayKey,
