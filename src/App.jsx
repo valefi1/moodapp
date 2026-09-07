@@ -49,7 +49,7 @@ const ENC_KEY_SESSION = 'moodsync-e2ee-passphrase';
 const ENC_KEY_DEVICE = 'moodsync-e2ee-passphrase-device';
 const STATUS_NOTIFY_DELAY_MS = 1800;
 const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
-const MAX_MOMENT_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_MOMENT_VIDEO_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_MOMENT_DURATION_SECONDS = 30;
 const MAX_POSTS = 250;
 const MEDIA_CONCURRENCY = 3;
@@ -662,10 +662,35 @@ async function getSignedUrl(path) {
   return data?.signedUrl || null;
 }
 
+function getMomentMediaKind(file) {
+  const mimeType = String(file?.type || '').toLowerCase().split(';')[0];
+  if (mimeType.startsWith('image/')) return 'image';
+  if (supportedMomentMimeTypes.has(mimeType)) return 'video';
+  return null;
+}
+
+function getStoredMomentMediaKind(moment) {
+  if (moment?.media_kind === 'image' || moment?.media_kind === 'video') return moment.media_kind;
+  const mimeType = String(moment?.media_mime_type || moment?.video_mime_type || '').toLowerCase();
+  return mimeType.startsWith('image/') ? 'image' : 'video';
+}
+
+function getMomentStoragePath(moment) {
+  return moment?.media_path || moment?.video_path || null;
+}
+
 function getMomentFileExtension(file) {
+  if (file?.type === 'image/jpeg') return 'jpg';
+  if (file?.type === 'image/png') return 'png';
+  if (file?.type === 'image/webp') return 'webp';
+  if (file?.type === 'image/gif') return 'gif';
+  if (file?.type === 'image/heic') return 'heic';
+  if (file?.type === 'image/heif') return 'heif';
   if (file?.type === 'video/mp4') return 'mp4';
   if (file?.type === 'video/quicktime') return 'mov';
   if (file?.type === 'video/x-m4v') return 'm4v';
+  const originalExtension = String(file?.name || '').match(/\.([a-z0-9]{1,8})$/i)?.[1];
+  if (originalExtension) return originalExtension.toLowerCase();
   return 'webm';
 }
 
@@ -702,19 +727,60 @@ function readVideoDuration(file) {
   });
 }
 
-async function validateMomentVideo(file, durationHint = null) {
+async function validateMomentMedia(file, durationHint = null) {
   const mimeType = String(file?.type || '').toLowerCase().split(';')[0];
-  if (!file || !supportedMomentMimeTypes.has(mimeType)) {
-    throw new Error('Použij video ve formátu WebM, MP4, MOV nebo M4V.');
+  const kind = getMomentMediaKind(file);
+  if (!file || !kind) {
+    throw new Error('Použij fotku nebo video ve formátu WebM, MP4, MOV či M4V.');
   }
-  if (file.size > MAX_MOMENT_SIZE_BYTES) {
+  if (kind === 'image') {
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      throw new Error('Fotka je příliš velká. Maximální velikost je 15 MB.');
+    }
+    return { kind, mimeType, duration: null };
+  }
+  if (file.size > MAX_MOMENT_VIDEO_SIZE_BYTES) {
     throw new Error('Video je příliš velké. Maximální velikost je 25 MB.');
   }
   const duration = Number.isFinite(durationHint) && durationHint > 0 ? durationHint : await readVideoDuration(file);
   if (duration > MAX_MOMENT_DURATION_SECONDS + 0.25) {
     throw new Error('Dnešní moment může mít nejvýše 30 sekund.');
   }
-  return Math.min(MAX_MOMENT_DURATION_SECONDS, Math.max(0.1, duration));
+  return { kind, mimeType, duration: Math.min(MAX_MOMENT_DURATION_SECONDS, Math.max(0.1, duration)) };
+}
+
+function getSafeRedgifsEmbedUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== 'https:' || !['redgifs.com', 'www.redgifs.com'].includes(hostname)) return null;
+    if (!/^\/ifr\/[a-z0-9]+\/?$/i.test(url.pathname)) return null;
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function getSafeRedgifsSourceUrl(value, externalId = '') {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol === 'https:' && ['redgifs.com', 'www.redgifs.com'].includes(hostname) && /^\/watch\/[a-z0-9]+\/?$/i.test(url.pathname)) {
+      url.username = '';
+      url.password = '';
+      url.search = '';
+      url.hash = '';
+      return url.toString();
+    }
+  } catch {
+    // A safe canonical source can still be built from the validated RedGIFs id.
+  }
+  return /^[a-z0-9]+$/i.test(externalId) ? `https://www.redgifs.com/watch/${externalId.toLowerCase()}` : null;
 }
 
 function Card({ children, className = '' }) {
@@ -1118,9 +1184,17 @@ export default function App() {
     }
 
     const hydrated = await Promise.all((data || []).map(async (moment) => {
+      const mediaPath = getMomentStoragePath(moment);
+      if (!mediaPath) {
+        return {
+          ...moment,
+          signedUrl: null,
+          ratings: moment.daily_moment_ratings || [],
+        };
+      }
       const { data: signedData, error: signedError } = await supabase.storage
         .from(STORAGE_BUCKET)
-        .createSignedUrl(moment.video_path, 60 * 60);
+        .createSignedUrl(mediaPath, 60 * 60);
       return {
         ...moment,
         signedUrl: signedError ? null : signedData?.signedUrl || null,
@@ -1584,16 +1658,19 @@ export default function App() {
   }
 
   async function sendGif(gif) {
-    if (!couple?.id || !session?.user?.id || !gif?.externalId || !gif?.mediaUrl || !gif?.thumbnailUrl || !gif?.sourceUrl) return false;
+    const embedUrl = getSafeRedgifsEmbedUrl(gif?.embedUrl);
+    const sourceUrl = getSafeRedgifsSourceUrl(gif?.sourceUrl, gif?.externalId);
+    if (!couple?.id || !session?.user?.id || !gif?.externalId || !sourceUrl || (!gif?.mediaUrl && !gif?.thumbnailUrl && !embedUrl)) return false;
     const { data, error } = await supabase.from('posts').insert({
       couple_id: couple.id,
       author_id: session.user.id,
       type: 'gif',
       text: 'GIF z RedGIFs',
       gif_external_id: gif.externalId,
-      gif_source_url: gif.sourceUrl,
+      gif_source_url: sourceUrl,
       gif_media_url: gif.mediaUrl,
       gif_thumbnail_url: gif.thumbnailUrl,
+      gif_embed_url: embedUrl,
       gif_duration: gif.duration,
       gif_width: gif.width,
       gif_height: gif.height,
@@ -1686,27 +1763,30 @@ export default function App() {
 
   async function uploadDailyMoment(file, caption, durationHint = null) {
     if (!couple?.id || !session?.user?.id) throw new Error('Nejdřív vytvoř nebo připoj pár.');
-    const duration = await validateMomentVideo(file, durationHint);
+    const media = await validateMomentMedia(file, durationHint);
     const extension = getMomentFileExtension(file);
     const today = getLocalDateKey();
-    const videoPath = `${couple.id}/daily-moments/${today}/${session.user.id}-${crypto.randomUUID()}.${extension}`;
-    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(videoPath, file, {
+    const mediaPath = `${couple.id}/daily-moments/${today}/${session.user.id}-${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(mediaPath, file, {
       cacheControl: '3600',
       upsert: false,
-      contentType: file.type,
+      contentType: media.mimeType,
     });
     if (uploadError) throw uploadError;
 
     const { error: insertError } = await supabase.from('daily_moments').insert({
       couple_id: couple.id,
       moment_date: today,
-      video_path: videoPath,
-      video_mime_type: file.type,
-      duration_seconds: Number(duration.toFixed(2)),
+      media_path: mediaPath,
+      media_kind: media.kind,
+      media_mime_type: media.mimeType,
+      video_path: media.kind === 'video' ? mediaPath : null,
+      video_mime_type: media.kind === 'video' ? media.mimeType : null,
+      duration_seconds: media.duration === null ? null : Number(media.duration.toFixed(2)),
       caption: caption.trim() || null,
     });
     if (insertError) {
-      await supabase.storage.from(STORAGE_BUCKET).remove([videoPath]);
+      await supabase.storage.from(STORAGE_BUCKET).remove([mediaPath]);
       throw insertError;
     }
 
@@ -1725,7 +1805,10 @@ export default function App() {
       .eq('couple_id', couple.id)
       .eq('author_id', session.user.id);
     if (error) throw error;
-    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).remove([moment.video_path]);
+    const paths = [...new Set([moment.media_path, moment.video_path].filter(Boolean))];
+    const { error: storageError } = paths.length
+      ? await supabase.storage.from(STORAGE_BUCKET).remove(paths)
+      : { error: null };
     await loadDailyMoments(couple.id);
     if (storageError) {
       setToast('Moment je smazaný, ale soubor se nepodařilo odstranit ze Storage.');
@@ -2649,9 +2732,9 @@ function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId,
   async function prepareFile(file, durationHint = null) {
     setError('');
     try {
-      const duration = await validateMomentVideo(file, durationHint);
+      const media = await validateMomentMedia(file, durationHint);
       setSelectedFile(file);
-      setSelectedDuration(duration);
+      setSelectedDuration(media.duration);
       setPreviewUrl(URL.createObjectURL(file));
     } catch (validationError) {
       setSelectedFile(null);
@@ -2754,9 +2837,9 @@ function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId,
   return (
     <div className="grid gap-4">
       <Card className="overflow-hidden bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-500 text-white">
-        <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black"><Video size={15} /> Dnešní moment · {getLocalDateKey()}</div>
+        <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black"><Camera size={15} /> Dnešní moment · {getLocalDateKey()}</div>
         <h1 className="mt-3 text-3xl font-black">{getDailyMomentPrompt()}</h1>
-        <p className="mt-2 max-w-2xl text-sm text-white/85">Nahraj nejvýše 30 sekund ze svého dne. Video uvidí jen členové vašeho páru.</p>
+        <p className="mt-2 max-w-2xl text-sm text-white/85">Sdílej krátké video nebo fotku ze svého dne. Moment uvidí jen členové vašeho páru.</p>
       </Card>
 
       {!couple && <EmptyState title="Nejdřív propojte pár" text="Dnešní moment můžete sdílet po vytvoření nebo připojení páru." icon={Users} />}
@@ -2764,8 +2847,8 @@ function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId,
 
       {couple && !ownMoment && (
         <Card>
-          <h2 className="flex items-center gap-2 text-xl font-black"><Camera className="text-pink-500" /> Natoč svůj moment</h2>
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">Maximálně 30 sekund a 25 MB. Podporované formáty: WebM, MP4, MOV a M4V.</p>
+          <h2 className="flex items-center gap-2 text-xl font-black"><Camera className="text-pink-500" /> Přidej svůj moment</h2>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">Fotka může mít nejvýše 15 MB. Video maximálně 30 sekund a 25 MB (WebM, MP4, MOV nebo M4V).</p>
 
           {recording && (
             <div className="mt-4 overflow-hidden rounded-3xl bg-black">
@@ -2784,17 +2867,19 @@ function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId,
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <button type="button" onClick={startRecording} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white"><Camera size={19} /> Spustit kameru</button>
               <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-white px-5 py-3 font-black text-pink-600 dark:border-white/10 dark:bg-white/10 dark:text-pink-100">
-                <Upload size={19} /> Vybrat video
-                <input type="file" accept="video/webm,video/mp4,video/quicktime,video/x-m4v" capture="environment" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) prepareFile(file); event.target.value = ''; }} />
+                <Upload size={19} /> Vybrat fotku nebo video
+                <input type="file" accept="image/*,video/webm,video/mp4,video/quicktime,video/x-m4v" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) prepareFile(file); event.target.value = ''; }} />
               </label>
             </div>
           )}
 
           {selectedFile && (
             <div className="mt-4 grid gap-4 lg:grid-cols-2 lg:items-start">
-              <video src={previewUrl} controls playsInline preload="metadata" className="max-h-[32rem] w-full rounded-3xl bg-black object-contain" />
+              {getMomentMediaKind(selectedFile) === 'image'
+                ? <img src={previewUrl} alt="Náhled vybrané fotky" className="max-h-[32rem] w-full rounded-3xl bg-black object-contain" />
+                : <video src={previewUrl} controls playsInline preload="metadata" className="max-h-[32rem] w-full rounded-3xl bg-black object-contain" />}
               <div>
-                <div className="flex items-center justify-between gap-3 text-sm font-bold"><span className="min-w-0 truncate">{selectedFile.name}</span><span className="shrink-0">{Math.ceil(selectedDuration || 0)} s · {(selectedFile.size / 1024 / 1024).toFixed(1)} MB</span></div>
+                <div className="flex items-center justify-between gap-3 text-sm font-bold"><span className="min-w-0 truncate">{selectedFile.name}</span><span className="shrink-0">{selectedDuration ? `${Math.ceil(selectedDuration)} s · ` : ''}{(selectedFile.size / 1024 / 1024).toFixed(1)} MB</span></div>
                 <textarea value={caption} onChange={(event) => setCaption(event.target.value)} maxLength={280} placeholder="Krátký popisek (nepovinné)…" className="mt-3 min-h-24 w-full rounded-2xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white" />
                 <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
                   <button type="button" disabled={uploading} onClick={discardSelection} className="rounded-2xl border border-gray-200 px-4 py-3 font-black disabled:opacity-60 dark:border-white/10">Zahodit</button>
@@ -2861,16 +2946,20 @@ function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserI
       </div>
       {!moment ? (
         <div className="mt-4 rounded-3xl border border-dashed border-pink-200 bg-pink-50/60 p-8 text-center dark:border-white/10 dark:bg-white/5">
-          <Video className="mx-auto text-pink-400" size={32} />
+          <Camera className="mx-auto text-pink-400" size={32} />
           <p className="mt-3 font-black">{own ? 'Tvůj moment zatím chybí.' : 'Partner/ka zatím nic nesdílel/a.'}</p>
         </div>
       ) : (
         <>
-          {moment.signedUrl ? <video src={moment.signedUrl} controls playsInline preload="metadata" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" /> : <div className="mt-4 rounded-3xl bg-gray-100 p-8 text-center text-sm font-bold dark:bg-white/10">Podepsaný odkaz na video se nepodařilo vytvořit.</div>}
+          {moment.signedUrl
+            ? getStoredMomentMediaKind(moment) === 'image'
+              ? <img src={moment.signedUrl} alt={moment.caption || 'Dnešní moment'} loading="lazy" decoding="async" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" />
+              : <video src={moment.signedUrl} controls playsInline preload="metadata" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" />
+            : <div className="mt-4 rounded-3xl bg-gray-100 p-8 text-center text-sm font-bold dark:bg-white/10">Podepsaný odkaz na médium se nepodařilo vytvořit.</div>}
           <div className="mt-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
               {moment.caption && <p className="whitespace-pre-wrap break-words font-bold">{moment.caption}</p>}
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">{Math.ceil(Number(moment.duration_seconds) || 0)} s · {formatDate(moment.created_at)}</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">{getStoredMomentMediaKind(moment) === 'video' ? `${Math.ceil(Number(moment.duration_seconds) || 0)} s · ` : 'Fotka · '}{formatDate(moment.created_at)}</p>
             </div>
             {own && <button type="button" disabled={deleting} onClick={handleDelete} className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-60 dark:border-rose-400/20 dark:text-rose-200"><Trash2 size={15} /> {deleting ? 'Mažu…' : 'Smazat'}</button>}
           </div>
@@ -3511,10 +3600,7 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, s
             {gifResults.length > 0 && (
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {gifResults.map((gif) => (
-                  <button key={gif.externalId} type="button" disabled={Boolean(sendingGifId)} onClick={() => handleGifSelect(gif)} className="relative aspect-video overflow-hidden rounded-2xl bg-gray-900 text-white disabled:opacity-60" aria-label="Odeslat vybraný GIF">
-                    <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" className="h-full w-full object-cover" />
-                    {sendingGifId === gif.externalId && <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-black">Odesílám…</span>}
-                  </button>
+                  <GifSearchCard key={gif.externalId} gif={gif} disabled={Boolean(sendingGifId)} sending={sendingGifId === gif.externalId} onSelect={handleGifSelect} />
                 ))}
               </div>
             )}
@@ -3701,32 +3787,91 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
 }
 
 function GifMedia({ post, compact = false }) {
+  const [videoFailed, setVideoFailed] = useState(!post.gif_media_url);
+  const [mediaImageFailed, setMediaImageFailed] = useState(!post.gif_media_url);
+  const [thumbnailFailed, setThumbnailFailed] = useState(!post.gif_thumbnail_url);
   const width = Number.isInteger(post.gif_width) && post.gif_width > 0 ? post.gif_width : undefined;
   const height = Number.isInteger(post.gif_height) && post.gif_height > 0 ? post.gif_height : undefined;
   const duration = typeof post.gif_duration === 'number' && Number.isFinite(post.gif_duration) ? Math.round(post.gif_duration) : null;
+  const embedUrl = getSafeRedgifsEmbedUrl(post.gif_embed_url)
+    || (/^[a-z0-9]+$/i.test(post.gif_external_id || '') ? `https://www.redgifs.com/ifr/${post.gif_external_id.toLowerCase()}` : null);
+  const sourceUrl = getSafeRedgifsSourceUrl(post.gif_source_url, post.gif_external_id);
+  const mediaClassName = `w-full bg-gray-950 object-contain ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`;
 
   return (
     <div className={compact ? '' : 'mt-4'}>
-      <video
-        src={post.gif_media_url}
-        poster={post.gif_thumbnail_url}
-        width={width}
-        height={height}
-        controls
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        className={`w-full bg-gray-950 object-contain ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`}
-      >
-        Tvůj prohlížeč neumí přehrát toto video.
-      </video>
+      {!videoFailed ? (
+        <video
+          src={post.gif_media_url}
+          poster={post.gif_thumbnail_url || undefined}
+          width={width}
+          height={height}
+          controls
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          onError={() => setVideoFailed(true)}
+          className={mediaClassName}
+        >
+          Tvůj prohlížeč neumí přehrát toto video.
+        </video>
+      ) : !mediaImageFailed ? (
+        <img src={post.gif_media_url} alt="GIF z RedGIFs" loading="lazy" decoding="async" onError={() => setMediaImageFailed(true)} className={mediaClassName} />
+      ) : !thumbnailFailed ? (
+        <img src={post.gif_thumbnail_url} alt="Náhled GIFu z RedGIFs" loading="lazy" decoding="async" onError={() => setThumbnailFailed(true)} className={mediaClassName} />
+      ) : embedUrl ? (
+        <RedgifsEmbed embedUrl={embedUrl} compact={compact} title="GIF z RedGIFs" />
+      ) : (
+        <div className={`${mediaClassName} grid min-h-36 place-items-center p-4 text-center text-sm font-bold text-white`}>GIF se nepodařilo načíst.</div>
+      )}
       <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs ${compact ? 'text-current opacity-80' : 'text-gray-500 dark:text-gray-300'}`}>
-        <a href={post.gif_source_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold underline underline-offset-2">
+        {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold underline underline-offset-2">
           Zdroj: RedGIFs <ExternalLink size={13} />
-        </a>
+        </a>}
         {duration !== null && <span>{duration} s</span>}
       </div>
+    </div>
+  );
+}
+
+function RedgifsEmbed({ embedUrl, compact = false, title }) {
+  return (
+    <iframe
+      src={embedUrl}
+      title={title}
+      loading="lazy"
+      sandbox="allow-scripts allow-same-origin allow-presentation"
+      allow="autoplay; fullscreen; picture-in-picture"
+      allowFullScreen
+      referrerPolicy="no-referrer"
+      className={`aspect-video w-full border-0 bg-gray-950 ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`}
+    />
+  );
+}
+
+function GifSearchCard({ gif, disabled, sending, onSelect }) {
+  const [thumbnailFailed, setThumbnailFailed] = useState(!gif.thumbnailUrl);
+  const embedUrl = getSafeRedgifsEmbedUrl(gif.embedUrl);
+  const sourceUrl = getSafeRedgifsSourceUrl(gif.sourceUrl, gif.externalId);
+
+  return (
+    <div className="min-w-0">
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-gray-900 text-white">
+        {!thumbnailFailed ? (
+          <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" decoding="async" onError={() => setThumbnailFailed(true)} className="h-full w-full object-cover" />
+        ) : embedUrl ? (
+          <div className="pointer-events-none h-full w-full" aria-hidden="true">
+            <RedgifsEmbed embedUrl={embedUrl} compact title="Náhled GIFu z RedGIFs" />
+          </div>
+        ) : (
+          <div className="grid h-full place-items-center p-2 text-center text-xs font-bold text-white/80">Náhled není dostupný</div>
+        )}
+        <button type="button" disabled={disabled} onClick={() => onSelect(gif)} className="absolute inset-0 z-10 bg-transparent ring-inset transition hover:ring-4 hover:ring-pink-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white disabled:opacity-60" aria-label="Odeslat vybraný GIF">
+          {sending && <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-black">Odesílám…</span>}
+        </button>
+      </div>
+      {sourceUrl && <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex max-w-full items-center gap-1 text-[11px] font-bold text-gray-500 underline underline-offset-2 dark:text-gray-300">Zdroj: RedGIFs <ExternalLink size={11} /></a>}
     </div>
   );
 }

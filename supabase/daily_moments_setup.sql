@@ -6,15 +6,64 @@ create table if not exists public.daily_moments (
   couple_id uuid not null references public.couples(id) on delete cascade,
   author_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   moment_date date not null,
-  video_path text not null,
-  video_mime_type text not null,
+  media_path text,
+  media_kind text,
+  media_mime_type text,
+  video_path text,
+  video_mime_type text,
   duration_seconds numeric,
   caption text,
   created_at timestamptz default now(),
   unique (couple_id, author_id, moment_date),
+  constraint daily_moments_media_kind_check check (media_kind in ('video', 'image')),
+  constraint daily_moments_media_path_check check (media_path is not null or video_path is not null),
   constraint daily_moments_video_mime_type_check check (video_mime_type in ('video/webm', 'video/mp4', 'video/quicktime', 'video/x-m4v')),
   constraint daily_moments_duration_check check (duration_seconds is null or (duration_seconds > 0 and duration_seconds <= 30))
 );
+
+-- Backward-compatible upgrade for databases created by an older version of this file.
+alter table public.daily_moments
+  add column if not exists media_path text,
+  add column if not exists media_kind text,
+  add column if not exists media_mime_type text,
+  add column if not exists video_path text,
+  add column if not exists video_mime_type text;
+
+alter table public.daily_moments
+  alter column video_path drop not null,
+  alter column video_mime_type drop not null;
+
+update public.daily_moments
+set media_path = coalesce(media_path, video_path),
+    media_kind = coalesce(media_kind, 'video'),
+    media_mime_type = coalesce(media_mime_type, video_mime_type)
+where media_path is null
+   or media_kind is null
+   or media_mime_type is null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.daily_moments'::regclass
+      and conname = 'daily_moments_media_kind_check'
+  ) then
+    alter table public.daily_moments
+      add constraint daily_moments_media_kind_check
+      check (media_kind in ('video', 'image'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.daily_moments'::regclass
+      and conname = 'daily_moments_media_path_check'
+  ) then
+    alter table public.daily_moments
+      add constraint daily_moments_media_path_check
+      check (media_path is not null or video_path is not null);
+  end if;
+end
+$$;
 
 create table if not exists public.daily_moment_ratings (
   id uuid primary key default gen_random_uuid(),

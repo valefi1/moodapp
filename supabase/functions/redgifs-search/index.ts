@@ -34,6 +34,26 @@ function safeRedgifsUrl(value: unknown): string | null {
   }
 }
 
+function safeRedgifsEmbedUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || (hostname !== "redgifs.com" && hostname !== "www.redgifs.com")) {
+      return null;
+    }
+    if (!/^\/ifr\/[a-z0-9]+\/?$/i.test(url.pathname)) return null;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
@@ -49,14 +69,16 @@ function sanitizeGif(value: unknown) {
   const externalId = typeof gif.id === "string" && /^[a-z0-9]+$/i.test(gif.id) ? gif.id : null;
   const mediaUrl = safeRedgifsUrl(urls.hd) || safeRedgifsUrl(urls.sd);
   const thumbnailUrl = safeRedgifsUrl(urls.poster) || safeRedgifsUrl(urls.thumbnail);
+  const embedUrl = safeRedgifsEmbedUrl(urls.html);
 
-  if (!externalId || !mediaUrl || !thumbnailUrl) return null;
+  if (!externalId || (!mediaUrl && !thumbnailUrl && !embedUrl)) return null;
 
   return {
     externalId,
     sourceUrl: `https://www.redgifs.com/watch/${externalId.toLowerCase()}`,
     mediaUrl,
     thumbnailUrl,
+    embedUrl,
     duration: finiteNumber(gif.duration),
     width: positiveInteger(gif.width),
     height: positiveInteger(gif.height),
