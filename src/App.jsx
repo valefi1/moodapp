@@ -2366,7 +2366,7 @@ export default function App() {
           <AppErrorBoundary resetKey={activeTab}>
             {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} searchGifs={searchGifs} sendGif={sendGif} gifPickerEnabled={Boolean(couple?.id && session?.user?.id)} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
-            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
+            {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} dailyMoments={dailyMoments} currentUserId={session?.user?.id} saveRating={saveDailyMomentRating} deleteMoment={deleteDailyMoment} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
             {activeTab === 'more' && <MorePanel setActiveTab={setActiveTab} />}
             {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={dailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
@@ -3704,7 +3704,11 @@ function FeedPanel({ posts, message, setMessage, sendMessage, addPhoto, deletePo
   return <Card><div className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><h2 className="text-3xl font-black">Deník páru</h2><p className="mt-1 text-gray-500 dark:text-gray-300">Zprávy, nálady a fotky na jednom místě.</p></div><PhotoUploadButton addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} /></div><div className="mb-5 flex gap-2"><TextInput value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder="Napiš rychlou zprávu..." /><button onClick={sendMessage} className="rounded-2xl bg-gray-900 px-5 font-black text-white dark:bg-white dark:text-gray-900">Poslat</button></div><FeedList posts={posts} panicMode={panicMode} openImage={openImage} deletePost={deletePost} />{hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} />}</Card>;
 }
 
-function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
+function GalleryPanel({ posts, dailyMoments = [], currentUserId, saveRating, deleteMoment, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
+  const mirroredMomentIds = new Set(posts.map((post) => post.daily_moment_id).filter(Boolean));
+  const unmirroredMoments = (photoCategory === 'all' || photoCategory === 'moments')
+    ? dailyMoments.filter((moment) => !mirroredMomentIds.has(moment.id))
+    : [];
   return (
     <Card>
       <div className="mb-5">
@@ -3737,13 +3741,23 @@ function GalleryPanel({ posts, addPhoto, deletePost, photoCategory, setPhotoCate
 
       <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} />
       <GalleryUploadForm addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} />
-      <FeedList
-        posts={posts}
-        panicMode={panicMode}
-        galleryOnly
-        openImage={openImage}
-        deletePost={deletePost}
-      />
+      {unmirroredMoments.length > 0 && (
+        <section className="mb-6 rounded-3xl border border-fuchsia-200 bg-fuchsia-50/70 p-4 dark:border-fuchsia-400/20 dark:bg-fuchsia-500/10">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black">Dnešní momenty</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">Moment je součástí galerie i bez staršího zrcadlového záznamu.</p>
+            </div>
+            <Heart className="shrink-0 text-pink-500" fill="currentColor" />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {unmirroredMoments.map((moment) => (
+              <DailyMomentCard key={`gallery-moment-${moment.id}`} label={moment.author_id === currentUserId ? 'Tvůj dnešní moment' : 'Moment partnera/partnerky'} moment={moment} otherMoment={unmirroredMoments.find((item) => item.id !== moment.id)} own={moment.author_id === currentUserId} currentUserId={currentUserId} deleteMoment={deleteMoment} saveRating={saveRating} />
+            ))}
+          </div>
+        </section>
+      )}
+      {(posts.length > 0 || unmirroredMoments.length === 0) && <FeedList posts={posts} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
       {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší fotky" />}
     </Card>
   );
