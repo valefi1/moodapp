@@ -8,6 +8,7 @@ import {
   ZapOff,
   Bell,
   CalendarDays,
+  Camera,
   Clock,
   Dice5,
   ExternalLink,
@@ -27,10 +28,14 @@ import {
   Sun,
   Trophy,
   Target,
+  Trash2,
   TrendingUp,
+  Upload,
   User,
   Users,
+  Video,
   Wand2,
+  X,
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -44,6 +49,8 @@ const ENC_KEY_SESSION = 'moodsync-e2ee-passphrase';
 const ENC_KEY_DEVICE = 'moodsync-e2ee-passphrase-device';
 const STATUS_NOTIFY_DELAY_MS = 1800;
 const MAX_IMAGE_SIZE_BYTES = 15 * 1024 * 1024;
+const MAX_MOMENT_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_MOMENT_DURATION_SECONDS = 30;
 const MAX_POSTS = 250;
 const MEDIA_CONCURRENCY = 3;
 const GALLERY_IMAGE_MAX_EDGE = 1600;
@@ -124,6 +131,18 @@ const eveningRitualItems = [
 ];
 
 const chatReactions = ['❤️', '🔥', '🥺', '😘', '🤗', '😂'];
+
+const dailyMomentPrompts = [
+  'Co ti dnes udělalo radost?',
+  'Jak vypadá tvůj dnešní moment?',
+  'Ukaž jednu malou věc ze svého dne.',
+  'Co by sis z dneška chtěl/a zapamatovat?',
+  'Kde se právě teď cítíš dobře?',
+  'Jaká maličkost dnes stojí za sdílení?',
+  'Co dnes vidíš kolem sebe?',
+];
+
+const supportedMomentMimeTypes = new Set(['video/webm', 'video/mp4', 'video/quicktime', 'video/x-m4v']);
 
 const wishCategories = [
   { id: 'experience', label: 'Chci zažít', prefix: 'Chci zažít' },
@@ -209,6 +228,12 @@ function hasVerifiedLovinoPositionUrl(position) {
 
 function getPartnerDayCard() {
   return partnerDayCards[getTodaySeed() % partnerDayCards.length];
+}
+
+function getDailyMomentPrompt() {
+  const localDate = getLocalDateKey();
+  const seed = localDate.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return dailyMomentPrompts[seed % dailyMomentPrompts.length];
 }
 
 function getRelationshipScoreData({ ownCloseness, ownHeat, partnerCloseness, partnerHeat, posts, challenges }) {
@@ -329,6 +354,7 @@ const navItems = [
 ];
 
 const secondaryTabs = [
+  { id: 'moments', label: 'Dnešní moment', icon: Video },
   { id: 'feed', label: 'Deník páru', icon: MessageCircle },
   { id: 'kamasutra', label: 'Kamasutra', icon: Heart },
   { id: 'profile', label: 'Profil', icon: User },
@@ -636,6 +662,61 @@ async function getSignedUrl(path) {
   return data?.signedUrl || null;
 }
 
+function getMomentFileExtension(file) {
+  if (file?.type === 'video/mp4') return 'mp4';
+  if (file?.type === 'video/quicktime') return 'mov';
+  if (file?.type === 'video/x-m4v') return 'm4v';
+  return 'webm';
+}
+
+function readVideoDuration(file) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const objectUrl = URL.createObjectURL(file);
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl);
+      video.removeAttribute('src');
+      video.load();
+    };
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Délku videa se nepodařilo ověřit. Zkus jiné video.'));
+    }, 10000);
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      const duration = video.duration;
+      window.clearTimeout(timeout);
+      cleanup();
+      if (!Number.isFinite(duration) || duration <= 0) {
+        reject(new Error('Délku videa se nepodařilo ověřit. Zkus jiné video.'));
+      } else {
+        resolve(duration);
+      }
+    };
+    video.onerror = () => {
+      window.clearTimeout(timeout);
+      cleanup();
+      reject(new Error('Video se nepodařilo načíst. Zkontroluj jeho formát.'));
+    };
+    video.src = objectUrl;
+  });
+}
+
+async function validateMomentVideo(file, durationHint = null) {
+  const mimeType = String(file?.type || '').toLowerCase().split(';')[0];
+  if (!file || !supportedMomentMimeTypes.has(mimeType)) {
+    throw new Error('Použij video ve formátu WebM, MP4, MOV nebo M4V.');
+  }
+  if (file.size > MAX_MOMENT_SIZE_BYTES) {
+    throw new Error('Video je příliš velké. Maximální velikost je 25 MB.');
+  }
+  const duration = Number.isFinite(durationHint) && durationHint > 0 ? durationHint : await readVideoDuration(file);
+  if (duration > MAX_MOMENT_DURATION_SECONDS + 0.25) {
+    throw new Error('Dnešní moment může mít nejvýše 30 sekund.');
+  }
+  return Math.min(MAX_MOMENT_DURATION_SECONDS, Math.max(0.1, duration));
+}
+
 function Card({ children, className = '' }) {
   return <section className={`box-border w-full max-w-full min-w-0 rounded-[1.5rem] border border-white/70 bg-white/85 p-4 shadow-xl backdrop-blur-xl dark:border-fuchsia-300/10 dark:bg-white/[0.07] dark:shadow-black/30 sm:rounded-[2rem] sm:p-5 ${className}`}>{children}</section>;
 }
@@ -676,6 +757,9 @@ export default function App() {
   const [posts, setPosts] = useState([]);
   const [coupleStatuses, setCoupleStatuses] = useState([]);
   const [coupleMembers, setCoupleMembers] = useState([]);
+  const [dailyMoments, setDailyMoments] = useState([]);
+  const [dailyMomentsLoading, setDailyMomentsLoading] = useState(false);
+  const [dailyMomentsError, setDailyMomentsError] = useState('');
   const [challenges, setChallenges] = useState([]);
   const [kamaProgress, setKamaProgress] = useState([]);
   const [wishlistItems, setWishlistItems] = useState([]);
@@ -813,6 +897,8 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_wishlist', filter: `couple_id=eq.${couple.id}` }, () => loadWishlistItems(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'couple_milestones', filter: `couple_id=eq.${couple.id}` }, () => loadMilestones(couple.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'partner_day_completions', filter: `couple_id=eq.${couple.id}` }, () => loadPartnerDayCompletions(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_moments', filter: `couple_id=eq.${couple.id}` }, () => loadDailyMoments(couple.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_moment_ratings' }, () => loadDailyMoments(couple.id))
       .subscribe();
 
     return () => supabase.removeChannel(channel);
@@ -840,7 +926,7 @@ export default function App() {
       setCoupleAvatarUrl(activeCouple?.avatar_path ? await getCoupleAvatarUrl(activeCouple) : null);
 
       if (activeCouple?.id) {
-        await Promise.all([loadChallenges(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id)]);
+        await Promise.all([loadChallenges(activeCouple.id), loadCoupleStatuses(activeCouple.id), loadCoupleMembers(activeCouple.id), loadWishlistItems(activeCouple.id), loadMilestones(activeCouple.id), loadPartnerDayCompletions(activeCouple.id), loadDailyMoments(activeCouple.id)]);
       }
     } catch (error) {
       setToast(error.message);
@@ -1010,6 +1096,39 @@ export default function App() {
     const { data, error } = await supabase.from('couple_members').select('*').eq('couple_id', coupleId);
     if (error) return setToast(error.message);
     setCoupleMembers(data || []);
+  }
+
+  async function loadDailyMoments(coupleId) {
+    if (!supabase || !coupleId) return;
+    setDailyMomentsLoading(true);
+    setDailyMomentsError('');
+    const today = getLocalDateKey();
+    const { data, error } = await supabase
+      .from('daily_moments')
+      .select('*, daily_moment_ratings(*)')
+      .eq('couple_id', coupleId)
+      .eq('moment_date', today)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      setDailyMoments([]);
+      setDailyMomentsLoading(false);
+      setDailyMomentsError(`Dnešní moment se nepodařilo načíst: ${error.message}`);
+      return;
+    }
+
+    const hydrated = await Promise.all((data || []).map(async (moment) => {
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(moment.video_path, 60 * 60);
+      return {
+        ...moment,
+        signedUrl: signedError ? null : signedData?.signedUrl || null,
+        ratings: moment.daily_moment_ratings || [],
+      };
+    }));
+    setDailyMoments(hydrated);
+    setDailyMomentsLoading(false);
   }
 
 
@@ -1454,6 +1573,40 @@ export default function App() {
     await notifyPartner('message_added', 'MoodSync', 'Partner/ka ti poslal/a novou zprávu.');
   }
 
+  async function searchGifs(query, count = 12) {
+    if (!couple?.id || !session?.user?.id) throw new Error('GIFy jsou dostupné až po připojení páru.');
+    const { data, error } = await supabase.functions.invoke('redgifs-search', {
+      body: { coupleId: couple.id, query, count },
+    });
+    if (error) throw new Error(await getFunctionErrorMessage(error));
+    if (data?.error) throw new Error(data.error);
+    return Array.isArray(data?.results) ? data.results : [];
+  }
+
+  async function sendGif(gif) {
+    if (!couple?.id || !session?.user?.id || !gif?.externalId || !gif?.mediaUrl || !gif?.thumbnailUrl || !gif?.sourceUrl) return false;
+    const { data, error } = await supabase.from('posts').insert({
+      couple_id: couple.id,
+      author_id: session.user.id,
+      type: 'gif',
+      text: 'GIF z RedGIFs',
+      gif_external_id: gif.externalId,
+      gif_source_url: gif.sourceUrl,
+      gif_media_url: gif.mediaUrl,
+      gif_thumbnail_url: gif.thumbnailUrl,
+      gif_duration: gif.duration,
+      gif_width: gif.width,
+      gif_height: gif.height,
+    }).select('*').single();
+    if (error) {
+      setToast(error.message);
+      return false;
+    }
+    mergePostRecord(data);
+    await notifyPartner('message_added', 'MoodSync', 'Partner/ka ti poslal/a GIF.');
+    return true;
+  }
+
 
   async function sendDailyStatus(status) {
     if (!couple?.id || !session?.user?.id || !status?.message) return;
@@ -1529,6 +1682,75 @@ export default function App() {
     } catch (error) {
       setToast(`Mazání se nepodařilo: ${error.message}`);
     }
+  }
+
+  async function uploadDailyMoment(file, caption, durationHint = null) {
+    if (!couple?.id || !session?.user?.id) throw new Error('Nejdřív vytvoř nebo připoj pár.');
+    const duration = await validateMomentVideo(file, durationHint);
+    const extension = getMomentFileExtension(file);
+    const today = getLocalDateKey();
+    const videoPath = `${couple.id}/daily-moments/${today}/${session.user.id}-${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(videoPath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type,
+    });
+    if (uploadError) throw uploadError;
+
+    const { error: insertError } = await supabase.from('daily_moments').insert({
+      couple_id: couple.id,
+      moment_date: today,
+      video_path: videoPath,
+      video_mime_type: file.type,
+      duration_seconds: Number(duration.toFixed(2)),
+      caption: caption.trim() || null,
+    });
+    if (insertError) {
+      await supabase.storage.from(STORAGE_BUCKET).remove([videoPath]);
+      throw insertError;
+    }
+
+    await loadDailyMoments(couple.id);
+    setToast('Dnešní moment je sdílený s partnerem/partnerkou.');
+    await notifyPartner('daily_moment_added', 'MoodSync', 'Partner/ka přidal/a Dnešní moment.');
+  }
+
+  async function deleteDailyMoment(moment) {
+    if (!couple?.id || !session?.user?.id || !moment?.id || moment.author_id !== session.user.id) return;
+    if (!window.confirm('Opravdu smazat svůj dnešní moment?')) return;
+    const { error } = await supabase
+      .from('daily_moments')
+      .delete()
+      .eq('id', moment.id)
+      .eq('couple_id', couple.id)
+      .eq('author_id', session.user.id);
+    if (error) throw error;
+    const { error: storageError } = await supabase.storage.from(STORAGE_BUCKET).remove([moment.video_path]);
+    await loadDailyMoments(couple.id);
+    if (storageError) {
+      setToast('Moment je smazaný, ale soubor se nepodařilo odstranit ze Storage.');
+    } else {
+      setToast('Dnešní moment byl smazaný.');
+    }
+  }
+
+  async function saveDailyMomentRating(moment, score, reaction) {
+    if (!couple?.id || !session?.user?.id || !moment?.id || moment.author_id === session.user.id) return;
+    const cleanReaction = reaction.trim();
+    const normalizedScore = Number(score);
+    if (!Number.isInteger(normalizedScore) || normalizedScore < 1 || normalizedScore > 5) {
+      throw new Error('Vyber hodnocení od 1 do 5 srdcí.');
+    }
+    if (cleanReaction.length > 280) throw new Error('Reakce může mít nejvýše 280 znaků.');
+
+    const existing = moment.ratings?.find((rating) => rating.rater_id === session.user.id);
+    const query = existing
+      ? supabase.from('daily_moment_ratings').update({ score: normalizedScore, reaction: cleanReaction || null }).eq('id', existing.id).eq('rater_id', session.user.id)
+      : supabase.from('daily_moment_ratings').insert({ moment_id: moment.id, score: normalizedScore, reaction: cleanReaction || null });
+    const { error } = await query;
+    if (error) throw error;
+    await loadDailyMoments(couple.id);
+    setToast('Hodnocení momentu je uložené.');
   }
 
   async function addChallenge(payload) {
@@ -1851,6 +2073,8 @@ export default function App() {
     setKamaProgress([]);
     setCoupleStatuses([]);
     setCoupleMembers([]);
+    setDailyMoments([]);
+    setDailyMomentsError('');
     setWishlistItems([]);
     setMilestones([]);
     setPartnerDayCompletions([]);
@@ -1868,7 +2092,7 @@ export default function App() {
   }, [posts, photoCategory, sortOrder]);
 
   const photoPosts = filteredPosts.filter((post) => post.type === 'photo');
-  const chatPosts = posts.filter((post) => post.type === 'chat');
+  const chatPosts = posts.filter((post) => post.type === 'chat' || post.type === 'gif');
   const filteredChallenges = challenges.filter((challenge) => challengeCategory === 'all' || challenge.category === challengeCategory);
   const challengeStats = getChallengeStats(challenges, session?.user?.id, partnerDayCompletions);
 
@@ -1984,15 +2208,19 @@ export default function App() {
               completePartnerDay={completePartnerDay}
               sendDailyStatus={sendDailyStatus}
               completeEveningRitual={completeEveningRitual}
+              dailyMoments={dailyMoments}
+              dailyMomentsLoading={dailyMomentsLoading}
+              openMoments={() => setActiveTab('moments')}
             />
           )}
 
           <AppErrorBoundary resetKey={activeTab}>
-            {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
+            {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} searchGifs={searchGifs} sendGif={sendGif} gifPickerEnabled={Boolean(couple?.id && session?.user?.id)} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'feed' && <FeedPanel posts={filteredPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
             {activeTab === 'more' && <MorePanel setActiveTab={setActiveTab} />}
+            {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={dailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
             {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} partnerName={partnerName} setPartnerName={setPartnerName} updateProfileName={updateProfileName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
@@ -2348,7 +2576,332 @@ function PairingPanel({ pairCodeInput, setPairCodeInput, createCouple, joinCoupl
   );
 }
 
-function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, activeChallenges = [], currentUserId, openChallenges, posts = [], challenges = [], wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual }) {
+function getMomentStatus(moment, otherMoment) {
+  if (!moment) return { label: 'Chybí', className: 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-200' };
+  if ((moment.ratings || []).length > 0) return { label: 'Ohodnoceno', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200' };
+  if (!otherMoment) return { label: 'Čeká na partnera', className: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200' };
+  return { label: 'Čeká na hodnocení', className: 'bg-pink-100 text-pink-700 dark:bg-pink-500/20 dark:text-pink-100' };
+}
+
+function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments }) {
+  const ownMoment = moments.find((moment) => moment.author_id === currentUserId);
+  const partnerMoment = moments.find((moment) => moment.author_id !== currentUserId);
+  const ownStatus = getMomentStatus(ownMoment, partnerMoment);
+  const partnerStatus = getMomentStatus(partnerMoment, ownMoment);
+
+  return (
+    <Card className="overflow-hidden border-fuchsia-200/70 bg-gradient-to-br from-fuchsia-50 to-pink-100 dark:border-fuchsia-400/20 dark:from-fuchsia-500/10 dark:to-pink-500/10">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 rounded-full bg-fuchsia-500 px-3 py-1 text-xs font-black text-white"><Video size={15} /> Dnešní moment</div>
+          <h2 className="mt-3 text-2xl font-black">{getDailyMomentPrompt()}</h2>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-black">
+            <span className={`rounded-full px-3 py-1.5 ${ownStatus.className}`}>Ty: {loading ? 'Načítám…' : ownStatus.label}</span>
+            <span className={`rounded-full px-3 py-1.5 ${partnerStatus.className}`}>Partner/ka: {loading ? 'Načítám…' : partnerStatus.label}</span>
+          </div>
+        </div>
+        <button type="button" onClick={openMoments} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gray-900 px-5 py-3 font-black text-white shadow-lg dark:bg-white dark:text-gray-900">
+          <Camera size={18} /> Otevřít moment
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId, uploadMoment, deleteMoment, saveRating }) {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedDuration, setSelectedDuration] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [caption, setCaption] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const cameraPreviewRef = useRef(null);
+  const streamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const recordingStartedAtRef = useRef(0);
+  const recordingTimerRef = useRef(null);
+  const cancelRecordingRef = useRef(false);
+  const ownMoment = moments.find((moment) => moment.author_id === currentUserId) || null;
+  const partnerMoment = moments.find((moment) => moment.author_id && moment.author_id !== currentUserId) || null;
+
+  useEffect(() => () => {
+    window.clearInterval(recordingTimerRef.current);
+    cancelRecordingRef.current = true;
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  useEffect(() => {
+    if (!recording || !cameraPreviewRef.current || !streamRef.current) return;
+    cameraPreviewRef.current.srcObject = streamRef.current;
+    cameraPreviewRef.current.play().catch(() => {
+      // Recording still works when a browser blocks the live preview.
+    });
+  }, [recording]);
+
+  async function prepareFile(file, durationHint = null) {
+    setError('');
+    try {
+      const duration = await validateMomentVideo(file, durationHint);
+      setSelectedFile(file);
+      setSelectedDuration(duration);
+      setPreviewUrl(URL.createObjectURL(file));
+    } catch (validationError) {
+      setSelectedFile(null);
+      setSelectedDuration(null);
+      setPreviewUrl('');
+      setError(validationError.message);
+    }
+  }
+
+  function finishCamera() {
+    window.clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (cameraPreviewRef.current) cameraPreviewRef.current.srcObject = null;
+    setRecording(false);
+  }
+
+  async function startRecording() {
+    setError('');
+    if (!navigator.mediaDevices?.getUserMedia || !('MediaRecorder' in window)) {
+      setError('Nahrávání v tomto prohlížeči není dostupné. Vyber video ze zařízení.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'user' } },
+        audio: true,
+      });
+      const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/mp4', 'video/webm'];
+      const mimeType = candidates.find((candidate) => window.MediaRecorder.isTypeSupported(candidate));
+      const recorder = mimeType ? new window.MediaRecorder(stream, { mimeType }) : new window.MediaRecorder(stream);
+      const baseMimeType = String(recorder.mimeType || mimeType || 'video/webm').split(';')[0];
+      streamRef.current = stream;
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      cancelRecordingRef.current = false;
+      recordingStartedAtRef.current = Date.now();
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const elapsed = Math.min(MAX_MOMENT_DURATION_SECONDS, (Date.now() - recordingStartedAtRef.current) / 1000);
+        const chunks = chunksRef.current;
+        const cancelled = cancelRecordingRef.current;
+        finishCamera();
+        if (cancelled || chunks.length === 0) return;
+        const blob = new Blob(chunks, { type: baseMimeType });
+        const extension = baseMimeType === 'video/mp4' ? 'mp4' : 'webm';
+        const file = new File([blob], `dnesni-moment.${extension}`, { type: baseMimeType, lastModified: Date.now() });
+        prepareFile(file, elapsed);
+      };
+      recorder.start(250);
+      setRecordingSeconds(0);
+      setRecording(true);
+      recordingTimerRef.current = window.setInterval(() => {
+        const elapsed = (Date.now() - recordingStartedAtRef.current) / 1000;
+        setRecordingSeconds(Math.min(MAX_MOMENT_DURATION_SECONDS, Math.ceil(elapsed)));
+        if (elapsed >= MAX_MOMENT_DURATION_SECONDS && recorder.state === 'recording') recorder.stop();
+      }, 250);
+    } catch (recordingError) {
+      finishCamera();
+      setError(recordingError.name === 'NotAllowedError' ? 'Kamera nebo mikrofon nebyly povolené.' : `Nahrávání se nepodařilo spustit: ${recordingError.message}`);
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+  }
+
+  function cancelRecording() {
+    cancelRecordingRef.current = true;
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    else finishCamera();
+    setRecordingSeconds(0);
+  }
+
+  function discardSelection() {
+    setSelectedFile(null);
+    setSelectedDuration(null);
+    setPreviewUrl('');
+    setError('');
+  }
+
+  async function handleUpload() {
+    if (!selectedFile || uploading) return;
+    setUploading(true);
+    setError('');
+    try {
+      await uploadMoment(selectedFile, caption, selectedDuration);
+      discardSelection();
+      setCaption('');
+    } catch (uploadError) {
+      setError(`Moment se nepodařilo uložit: ${uploadError.message}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Card className="overflow-hidden bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-500 text-white">
+        <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black"><Video size={15} /> Dnešní moment · {getLocalDateKey()}</div>
+        <h1 className="mt-3 text-3xl font-black">{getDailyMomentPrompt()}</h1>
+        <p className="mt-2 max-w-2xl text-sm text-white/85">Nahraj nejvýše 30 sekund ze svého dne. Video uvidí jen členové vašeho páru.</p>
+      </Card>
+
+      {!couple && <EmptyState title="Nejdřív propojte pár" text="Dnešní moment můžete sdílet po vytvoření nebo připojení páru." icon={Users} />}
+      {loadError && <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-200">{loadError}</div>}
+
+      {couple && !ownMoment && (
+        <Card>
+          <h2 className="flex items-center gap-2 text-xl font-black"><Camera className="text-pink-500" /> Natoč svůj moment</h2>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-300">Maximálně 30 sekund a 25 MB. Podporované formáty: WebM, MP4, MOV a M4V.</p>
+
+          {recording && (
+            <div className="mt-4 overflow-hidden rounded-3xl bg-black">
+              <video ref={cameraPreviewRef} muted playsInline className="aspect-[3/4] max-h-[65dvh] w-full object-cover sm:aspect-video" />
+              <div className="flex items-center justify-between gap-3 bg-gray-950 p-3 text-white">
+                <span className="inline-flex items-center gap-2 font-black"><span className="h-3 w-3 animate-pulse rounded-full bg-red-500" /> {recordingSeconds}/30 s</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={cancelRecording} className="inline-flex items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-sm font-black"><X size={16} /> Zrušit</button>
+                  <button type="button" onClick={stopRecording} className="rounded-xl bg-red-500 px-4 py-2 text-sm font-black">Zastavit</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!recording && !selectedFile && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={startRecording} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white"><Camera size={19} /> Spustit kameru</button>
+              <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-pink-200 bg-white px-5 py-3 font-black text-pink-600 dark:border-white/10 dark:bg-white/10 dark:text-pink-100">
+                <Upload size={19} /> Vybrat video
+                <input type="file" accept="video/webm,video/mp4,video/quicktime,video/x-m4v" capture="environment" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) prepareFile(file); event.target.value = ''; }} />
+              </label>
+            </div>
+          )}
+
+          {selectedFile && (
+            <div className="mt-4 grid gap-4 lg:grid-cols-2 lg:items-start">
+              <video src={previewUrl} controls playsInline preload="metadata" className="max-h-[32rem] w-full rounded-3xl bg-black object-contain" />
+              <div>
+                <div className="flex items-center justify-between gap-3 text-sm font-bold"><span className="min-w-0 truncate">{selectedFile.name}</span><span className="shrink-0">{Math.ceil(selectedDuration || 0)} s · {(selectedFile.size / 1024 / 1024).toFixed(1)} MB</span></div>
+                <textarea value={caption} onChange={(event) => setCaption(event.target.value)} maxLength={280} placeholder="Krátký popisek (nepovinné)…" className="mt-3 min-h-24 w-full rounded-2xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white" />
+                <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+                  <button type="button" disabled={uploading} onClick={discardSelection} className="rounded-2xl border border-gray-200 px-4 py-3 font-black disabled:opacity-60 dark:border-white/10">Zahodit</button>
+                  <button type="button" disabled={uploading} onClick={handleUpload} className="rounded-2xl bg-pink-500 px-5 py-3 font-black text-white disabled:opacity-60">{uploading ? 'Nahrávám…' : 'Sdílet dnešní moment'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+          {error && <p role="alert" className="mt-3 text-sm font-bold text-rose-600 dark:text-rose-300">{error}</p>}
+        </Card>
+      )}
+
+      {loading && <div role="status" className="rounded-2xl bg-white/70 p-4 text-center font-bold text-pink-600 dark:bg-white/10 dark:text-pink-200">Načítám dnešní momenty…</div>}
+      {!loading && couple && (
+        <section className="grid gap-4 lg:grid-cols-2">
+          <DailyMomentCard key={`own-${ownMoment?.id || 'missing'}-${ownMoment?.ratings?.map((rating) => `${rating.id}:${rating.score}:${rating.reaction}`).join('|') || ''}`} label="Tvůj moment" moment={ownMoment} otherMoment={partnerMoment} own currentUserId={currentUserId} deleteMoment={deleteMoment} />
+          <DailyMomentCard key={`partner-${partnerMoment?.id || 'missing'}-${partnerMoment?.ratings?.map((rating) => `${rating.id}:${rating.score}:${rating.reaction}`).join('|') || ''}`} label="Moment partnera/partnerky" moment={partnerMoment} otherMoment={ownMoment} currentUserId={currentUserId} saveRating={saveRating} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserId, deleteMoment, saveRating }) {
+  const existingRating = own
+    ? moment?.ratings?.[0] || null
+    : moment?.ratings?.find((rating) => rating.rater_id === currentUserId) || null;
+  const [score, setScore] = useState(existingRating?.score || 0);
+  const [reaction, setReaction] = useState(existingRating?.reaction || '');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  const status = getMomentStatus(moment, otherMoment);
+
+  async function handleRatingSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await saveRating(moment, score, reaction);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    setError('');
+    try {
+      await deleteMoment(moment);
+    } catch (deleteError) {
+      setError(deleteError.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <Card className="min-w-0">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-black">{label}</h2>
+        <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${status.className}`}>{status.label}</span>
+      </div>
+      {!moment ? (
+        <div className="mt-4 rounded-3xl border border-dashed border-pink-200 bg-pink-50/60 p-8 text-center dark:border-white/10 dark:bg-white/5">
+          <Video className="mx-auto text-pink-400" size={32} />
+          <p className="mt-3 font-black">{own ? 'Tvůj moment zatím chybí.' : 'Partner/ka zatím nic nesdílel/a.'}</p>
+        </div>
+      ) : (
+        <>
+          {moment.signedUrl ? <video src={moment.signedUrl} controls playsInline preload="metadata" className="mt-4 max-h-[34rem] w-full rounded-3xl bg-black object-contain" /> : <div className="mt-4 rounded-3xl bg-gray-100 p-8 text-center text-sm font-bold dark:bg-white/10">Podepsaný odkaz na video se nepodařilo vytvořit.</div>}
+          <div className="mt-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {moment.caption && <p className="whitespace-pre-wrap break-words font-bold">{moment.caption}</p>}
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">{Math.ceil(Number(moment.duration_seconds) || 0)} s · {formatDate(moment.created_at)}</p>
+            </div>
+            {own && <button type="button" disabled={deleting} onClick={handleDelete} className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-rose-200 px-3 py-2 text-xs font-black text-rose-600 disabled:opacity-60 dark:border-rose-400/20 dark:text-rose-200"><Trash2 size={15} /> {deleting ? 'Mažu…' : 'Smazat'}</button>}
+          </div>
+
+          {own && existingRating && (
+            <div className="mt-4 rounded-3xl bg-pink-50 p-4 dark:bg-pink-500/10">
+              <div className="text-sm font-black">Hodnocení od partnera/partnerky</div>
+              <div className="mt-2 text-xl" aria-label={`${existingRating.score} z 5 srdcí`}>{'❤️'.repeat(existingRating.score)}{'🤍'.repeat(5 - existingRating.score)}</div>
+              {existingRating.reaction && <p className="mt-2 whitespace-pre-wrap break-words text-sm">{existingRating.reaction}</p>}
+            </div>
+          )}
+
+          {!own && (
+            <div className="mt-4 border-t border-pink-100 pt-4 dark:border-white/10">
+              <div className="text-sm font-black">{existingRating ? 'Tvoje hodnocení' : 'Ohodnoť moment'}</div>
+              <div className="mt-2 flex gap-1" role="group" aria-label="Hodnocení momentu">
+                {[1, 2, 3, 4, 5].map((value) => <button type="button" key={value} onClick={() => setScore(value)} aria-label={`${value} z 5 srdcí`} aria-pressed={score === value} className={`rounded-xl p-1 text-3xl transition ${value <= score ? 'scale-105' : 'grayscale opacity-35'}`}>❤️</button>)}
+              </div>
+              <textarea value={reaction} onChange={(event) => setReaction(event.target.value)} maxLength={280} placeholder="Napiš krátkou reakci…" className="mt-3 min-h-24 w-full rounded-2xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white" />
+              <div className="mt-1 text-right text-xs text-gray-400">{reaction.length}/280</div>
+              <button type="button" disabled={saving || score < 1} onClick={handleRatingSave} className="mt-2 w-full rounded-2xl bg-pink-500 px-5 py-3 font-black text-white disabled:opacity-50">{saving ? 'Ukládám…' : existingRating ? 'Uložit změny' : 'Uložit hodnocení'}</button>
+            </div>
+          )}
+          {error && <p role="alert" className="mt-3 text-sm font-bold text-rose-600 dark:text-rose-300">{error}</p>}
+        </>
+      )}
+    </Card>
+  );
+}
+
+function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, activeChallenges = [], currentUserId, openChallenges, posts = [], challenges = [], wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual, dailyMoments = [], dailyMomentsLoading, openMoments }) {
   const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
   const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
   const partnerMood = freshPartnerStatus?.mood_label ? getMoodByLabel(freshPartnerStatus.mood_label) : latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
@@ -2382,6 +2935,8 @@ function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveSta
           </div>
         </div>
       </Card>
+
+      <DailyMomentHomeCard moments={dailyMoments} loading={dailyMomentsLoading} currentUserId={currentUserId} openMoments={openMoments} />
 
       <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
         <DailyStatusCard sendDailyStatus={sendDailyStatus} />
@@ -2804,12 +3359,18 @@ const quickChatMessages = [
   'Děkuju za tebe'
 ];
 
-function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, currentUserId, partnerName, hasMorePosts, loadOlderPosts }) {
+function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, sendGif, gifPickerEnabled, deletePost, currentUserId, partnerName, hasMorePosts, loadOlderPosts }) {
   const sortedMessages = [...posts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   const partnerLabel = partnerName?.trim() || 'Partner/ka';
   const messagesEndRef = useRef(null);
   const latestMessageId = sortedMessages.at(-1)?.id;
   const previousLatestMessageId = useRef(null);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [gifQuery, setGifQuery] = useState('');
+  const [gifResults, setGifResults] = useState([]);
+  const [gifSearching, setGifSearching] = useState(false);
+  const [gifError, setGifError] = useState('');
+  const [sendingGifId, setSendingGifId] = useState('');
 
   useEffect(() => {
     if (latestMessageId && latestMessageId !== previousLatestMessageId.current) {
@@ -2817,6 +3378,48 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, c
       previousLatestMessageId.current = latestMessageId;
     }
   }, [latestMessageId]);
+
+  async function handleGifSearch(event) {
+    event.preventDefault();
+    const query = gifQuery.trim();
+    if (query.length < 2 || query.length > 80 || gifSearching) {
+      setGifError('Hledaný výraz musí mít 2 až 80 znaků.');
+      return;
+    }
+
+    setGifSearching(true);
+    setGifError('');
+    try {
+      const results = await searchGifs(query, 12);
+      setGifResults(results);
+      if (results.length === 0) setGifError('Pro tento výraz se nenašel žádný GIF.');
+    } catch (error) {
+      setGifResults([]);
+      setGifError(`GIFy se nepodařilo načíst: ${error.message}`);
+    } finally {
+      setGifSearching(false);
+    }
+  }
+
+  async function handleGifSelect(gif) {
+    if (sendingGifId) return;
+    setSendingGifId(gif.externalId);
+    setGifError('');
+    try {
+      const sent = await sendGif(gif);
+      if (sent) {
+        setGifPickerOpen(false);
+        setGifResults([]);
+        setGifQuery('');
+      } else {
+        setGifError('GIF se nepodařilo odeslat.');
+      }
+    } catch (error) {
+      setGifError(`GIF se nepodařilo odeslat: ${error.message}`);
+    } finally {
+      setSendingGifId('');
+    }
+  }
 
   return (
     <Card className="flex h-[calc(100dvh-9.5rem)] min-h-[560px] flex-col overflow-hidden p-0 sm:h-[calc(100dvh-11rem)]">
@@ -2860,7 +3463,9 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, c
                     <div className={`mb-1 text-xs font-black ${isMine ? 'text-white/80' : 'text-gray-500 dark:text-gray-300'}`}>
                       {isMine ? 'Ty' : partnerLabel} · {formatDate(post.created_at)}
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>
+                    {post.type === 'gif'
+                      ? <GifMedia post={post} compact />
+                      : <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>}
                     {!isMine && (
                       <div className="mt-3 flex flex-wrap gap-1">
                         {chatReactions.map((reaction) => (
@@ -2894,7 +3499,34 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, deletePost, c
       </div>
 
       <div className="shrink-0 border-t border-pink-100/80 bg-white/95 p-3 backdrop-blur dark:border-white/10 dark:bg-gray-950/95 sm:p-4">
-        <div className="grid gap-2 grid-cols-[1fr_auto]">
+        {gifPickerEnabled && gifPickerOpen && (
+          <div className="mb-3 max-h-[48dvh] overflow-y-auto rounded-3xl border border-pink-100 bg-pink-50 p-3 dark:border-white/10 dark:bg-white/5 sm:p-4">
+            <form onSubmit={handleGifSearch} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <TextInput value={gifQuery} onChange={(event) => setGifQuery(event.target.value)} maxLength={80} placeholder="Hledat GIF…" aria-label="Hledat GIF" />
+              <button type="submit" disabled={gifSearching} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-900 px-4 py-3 font-black text-white disabled:opacity-60 dark:bg-white dark:text-gray-900">
+                <Search size={18} /> <span className="hidden sm:inline">{gifSearching ? 'Hledám…' : 'Hledat'}</span>
+              </button>
+            </form>
+            {gifError && <p role="status" className="mt-2 text-sm font-bold text-rose-600 dark:text-rose-300">{gifError}</p>}
+            {gifResults.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {gifResults.map((gif) => (
+                  <button key={gif.externalId} type="button" disabled={Boolean(sendingGifId)} onClick={() => handleGifSelect(gif)} className="relative aspect-video overflow-hidden rounded-2xl bg-gray-900 text-white disabled:opacity-60" aria-label="Odeslat vybraný GIF">
+                    <img src={gif.thumbnailUrl} alt="Náhled GIFu" loading="lazy" className="h-full w-full object-cover" />
+                    {sendingGifId === gif.externalId && <span className="absolute inset-0 grid place-items-center bg-black/60 text-xs font-black">Odesílám…</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-300">Výsledky a média poskytuje RedGIFs.</p>
+          </div>
+        )}
+        <div className={`grid gap-2 ${gifPickerEnabled ? 'grid-cols-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_auto]'}`}>
+          {gifPickerEnabled && (
+            <button type="button" onClick={() => { setGifPickerOpen((open) => !open); setGifError(''); }} className={`rounded-2xl border px-3 py-3 text-sm font-black transition ${gifPickerOpen ? 'border-pink-500 bg-pink-500 text-white' : 'border-pink-200 bg-white text-pink-600 dark:border-white/10 dark:bg-white/10 dark:text-pink-100'}`} aria-expanded={gifPickerOpen} aria-label="Vybrat GIF">
+              GIF
+            </button>
+          )}
           <TextInput
             value={message}
             onChange={(event) => setMessage(event.target.value)}
@@ -3044,7 +3676,7 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
           ) : (
             <>
               <div className="flex items-center justify-between gap-4">
-                <div className="font-black">{post.type === 'photo' ? 'Fotka' : post.type === 'mood' ? 'Nálada' : post.type === 'status' ? 'Status' : post.type === 'ritual' ? 'Rituál' : 'Zpráva'}</div>
+                <div className="font-black">{post.type === 'photo' ? 'Fotka' : post.type === 'gif' ? 'GIF' : post.type === 'mood' ? 'Nálada' : post.type === 'status' ? 'Status' : post.type === 'ritual' ? 'Rituál' : 'Zpráva'}</div>
                 <div className="flex items-center gap-3">
                   <div className="text-sm text-gray-500 dark:text-gray-300">{formatDate(post.created_at)}</div>
                   <button
@@ -3056,13 +3688,45 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
                   </button>
                 </div>
               </div>
-              <p className="mt-3 text-lg">{post.text}</p>
+              {post.type !== 'gif' && <p className="mt-3 text-lg">{post.text}</p>}
               {post.mood_label && <div className="mt-4 grid gap-2 sm:grid-cols-3"><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nálada: {post.mood_label}</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Blízkost: {post.closeness}%</div><div className="rounded-2xl bg-white px-4 py-3 text-sm font-bold dark:bg-white/10">Nadrženost: {post.heat}%</div></div>}
               {post.type === 'photo' && <MediaCard imageUrl={post.signedUrl} locked={post.locked} loading={post.mediaLoading} blurred={panicMode} category={post.photo_category || 'fotka'} openImage={openImage} />}
+              {post.type === 'gif' && <GifMedia post={post} />}
             </>
           )}
         </article>
       ))}
+    </div>
+  );
+}
+
+function GifMedia({ post, compact = false }) {
+  const width = Number.isInteger(post.gif_width) && post.gif_width > 0 ? post.gif_width : undefined;
+  const height = Number.isInteger(post.gif_height) && post.gif_height > 0 ? post.gif_height : undefined;
+  const duration = typeof post.gif_duration === 'number' && Number.isFinite(post.gif_duration) ? Math.round(post.gif_duration) : null;
+
+  return (
+    <div className={compact ? '' : 'mt-4'}>
+      <video
+        src={post.gif_media_url}
+        poster={post.gif_thumbnail_url}
+        width={width}
+        height={height}
+        controls
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        className={`w-full bg-gray-950 object-contain ${compact ? 'max-h-80 rounded-xl' : 'max-h-[32rem] rounded-3xl'}`}
+      >
+        Tvůj prohlížeč neumí přehrát toto video.
+      </video>
+      <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs ${compact ? 'text-current opacity-80' : 'text-gray-500 dark:text-gray-300'}`}>
+        <a href={post.gif_source_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold underline underline-offset-2">
+          Zdroj: RedGIFs <ExternalLink size={13} />
+        </a>
+        {duration !== null && <span>{duration} s</span>}
+      </div>
     </div>
   );
 }
@@ -3560,10 +4224,11 @@ function MorePanel({ setActiveTab }) {
         <h2 className="mt-3 text-3xl font-black">Co chcete dělat?</h2>
         <p className="mt-1 text-gray-500 dark:text-gray-300">Méně používané části jsou tady, aby hlavní obrazovka zůstala jednoduchá.</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {secondaryTabs.map((item) => {
           const Icon = item.icon;
           const descriptions = {
+            moments: 'Krátká videa z dneška a partnerské hodnocení srdíčky.',
             feed: 'Nálady, statusy a společné momenty na jednom místě.',
             kamasutra: 'Soukromá inspirace, oblíbené polohy a společný pokrok.',
             profile: 'Jména, párování, zabezpečení fotek a nastavení účtu.',

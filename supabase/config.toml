@@ -15,3 +15,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/mood-daily-reminder/deno.json"
 entrypoint = "./functions/mood-daily-reminder/index.ts"
+
+[functions.redgifs-search]
+enabled = true
+verify_jwt = true
+import_map = "./functions/redgifs-search/deno.json"
+entrypoint = "./functions/redgifs-search/index.ts"
