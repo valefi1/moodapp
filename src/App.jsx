@@ -3789,7 +3789,6 @@ function FeedList({ posts, panicMode, galleryOnly = false, openImage, deletePost
 function GifMedia({ post, compact = false }) {
   const [videoFailed, setVideoFailed] = useState(!post.gif_media_url);
   const [videoReady, setVideoReady] = useState(false);
-  const [mediaImageFailed, setMediaImageFailed] = useState(!post.gif_media_url);
   const [thumbnailFailed, setThumbnailFailed] = useState(!post.gif_thumbnail_url);
   const width = Number.isInteger(post.gif_width) && post.gif_width > 0 ? post.gif_width : undefined;
   const height = Number.isInteger(post.gif_height) && post.gif_height > 0 ? post.gif_height : undefined;
@@ -3826,12 +3825,10 @@ function GifMedia({ post, compact = false }) {
         >
           Tvůj prohlížeč neumí přehrát toto video.
         </video>
-      ) : !mediaImageFailed ? (
-        <img src={post.gif_media_url} alt="GIF z RedGIFs" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setMediaImageFailed(true)} className={mediaClassName} />
-      ) : !thumbnailFailed ? (
-        <img src={post.gif_thumbnail_url} alt="Náhled GIFu z RedGIFs" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className={mediaClassName} />
       ) : embedUrl ? (
         <RedgifsEmbed embedUrl={embedUrl} compact={compact} title="GIF z RedGIFs" />
+      ) : !thumbnailFailed ? (
+        <img src={post.gif_thumbnail_url} alt="Náhled GIFu z RedGIFs" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setThumbnailFailed(true)} className={mediaClassName} />
       ) : (
         <div className={`${mediaClassName} grid min-h-36 rounded-3xl place-items-center p-4 text-center text-sm font-bold text-white`}>GIF se nepodařilo načíst.</div>
       )}
