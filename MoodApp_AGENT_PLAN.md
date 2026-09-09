@@ -112,6 +112,11 @@
 - [ ] Přidat testy pro ownership/status/challenge state derivace.
 - [ ] Provést screenshot review s autentizovanými daty, pokud bude dostupný bezpečný testovací účet.
 
+### Release evidence
+- [x] Commit `0ff9aed0fe934fe7607ea3ba74f972f1deb99f2c` vytvořen.
+- [x] Push na `origin/main` ověřen stejným SHA.
+- [x] Lokální změny jsou po commitu čisté; live Vercel/Supabase deployment není tímto commitem samostatně potvrzen.
+
 ### Sloučené auditní závěry
 - UX: aplikace má dobrý základ primárních flow, ale `App.jsx` je příliš koncentrovaný; dashboard a husté mobilní surface vyžadují další produktovou hierarchii a skutečný auth browser test.
 - Security/data: RLS/core schema není v repozitáři kompletně kanonizované; bezpečné SQL změny vyžadují live schema snapshot. Push scheduler/function/live delivery zůstává samostatný deployment gate.
