@@ -43,6 +43,7 @@ import { PostMediaCard } from './components/media/MediaCards';
 import { DailyMomentGalleryArchive } from './features/moments/DailyMomentGalleryArchive';
 import { decryptSignedUrlToObjectUrl, encryptFileForCouple } from './lib/crypto';
 import { Card, EmptyState, PillButton, TextInput } from './components/ui/Primitives';
+import { getLocalDateKey, getRecentDateKeys, normalizeSearchText, shouldRotatePushSubscription } from './lib/productUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -51,6 +52,7 @@ const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supa
 const LOCAL_KEY = 'moodsync-ui-v2';
 const STORAGE_BUCKET = 'couple-media';
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+const VAPID_STORAGE_KEY = 'moodsync-vapid-public-key';
 const ENC_KEY_SESSION = 'moodsync-e2ee-passphrase';
 const ENC_KEY_DEVICE = 'moodsync-e2ee-passphrase-device';
 const STATUS_NOTIFY_DELAY_MS = 1800;
@@ -171,28 +173,6 @@ function getTodaySeed() {
   return today.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
-function getLocalDateKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getRecentDateKeys(days = 7) {
-  return new Set(Array.from({ length: days }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - index);
-    return getLocalDateKey(date);
-  }));
-}
-
-function normalizeSearchText(value = '') {
-  return String(value)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
-}
 
 const LOVINO_KAMASUTRA_URLS = {
   vodnar: 'https://www.lovino.cz/polohy/vodnar',
@@ -1302,6 +1282,14 @@ export default function App() {
 
       let subscription = await registration.pushManager.getSubscription();
 
+      // A browser can keep a valid-looking subscription created with an older
+      // VAPID key. Rotate it explicitly before storing it server-side.
+      const storedVapidKey = window.localStorage.getItem(VAPID_STORAGE_KEY);
+      if (subscription && shouldRotatePushSubscription(storedVapidKey, VAPID_PUBLIC_KEY)) {
+        await subscription.unsubscribe().catch(() => undefined);
+        subscription = null;
+      }
+
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -1337,6 +1325,8 @@ export default function App() {
       );
 
       if (error) throw error;
+
+      window.localStorage.setItem(VAPID_STORAGE_KEY, VAPID_PUBLIC_KEY);
 
       setNotificationsEnabled(true);
       setToast('Mobilní upozornění jsou zapnutá na tomto zařízení. Pro iPhone musí být aplikace spuštěná z ikony na ploše.');
