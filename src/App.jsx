@@ -3757,13 +3757,25 @@ function LoadOlderButton({ onClick, label = 'Načíst starší příspěvky' }) 
 function GalleryUploadForm({ addPhoto, encryptionReady, onMissingE2EE }) {
   const [caption, setCaption] = useState('');
   const [category, setCategory] = useState('romantic');
-  function handleUpload(file) {
-    if (!file) return;
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  async function handleUpload(file) {
+    if (!file || uploading) return;
     if (!encryptionReady) { onMissingE2EE?.(); return; }
-    addPhoto(file, { text: caption, photoCategory: category });
-    setCaption('');
+    setUploading(true);
+    setUploadError('');
+    try {
+      await addPhoto(file, { text: caption, photoCategory: category });
+      setCaption('');
+    } catch (error) {
+      setUploadError(error?.message || 'Fotku se nepodařilo nahrát. Zkus to znovu.');
+    } finally {
+      setUploading(false);
+    }
   }
-  return <div className="mb-6 rounded-[2rem] border border-pink-100 bg-pink-50 p-5 dark:border-white/10 dark:bg-white/5"><div className="grid gap-4 lg:grid-cols-[1fr_220px_auto] lg:items-end"><label className="grid gap-2 text-sm font-bold">Popisek fotky<TextInput value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Naše soukromá vzpomínka..." /></label><label className="grid gap-2 text-sm font-bold">Kategorie<select value={category} onChange={(event) => setCategory(event.target.value)} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 dark:border-white/10 dark:bg-gray-900 dark:text-white">{photoCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>{encryptionReady ? <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white hover:bg-pink-600"><input type="file" accept="image/*" className="hidden" onChange={(event) => { handleUpload(event.target.files?.[0]); event.target.value = ''; }} /><Image size={18} /> Nahrát fotku</label> : <button type="button" onClick={onMissingE2EE} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-400 px-5 py-3 font-black text-gray-900 hover:bg-amber-300"><Lock size={18} /> Nastavit E2EE heslo</button>}</div></div>;
+
+  return <div className="mb-6 rounded-[2rem] border border-pink-100 bg-pink-50 p-5 dark:border-white/10 dark:bg-white/5"><div className="grid gap-4 lg:grid-cols-[1fr_220px_auto] lg:items-end"><label className="grid gap-2 text-sm font-bold">Popisek fotky<TextInput value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Naše soukromá vzpomínka..." disabled={uploading} /></label><label className="grid gap-2 text-sm font-bold">Kategorie<select value={category} onChange={(event) => setCategory(event.target.value)} disabled={uploading} className="rounded-2xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 disabled:opacity-60 dark:border-white/10 dark:bg-gray-900 dark:text-white">{photoCategories.filter((item) => item.id !== 'all').map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>{encryptionReady ? <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl px-5 py-3 font-black text-white ${uploading ? 'cursor-wait bg-pink-300' : 'bg-pink-500 hover:bg-pink-600'}`}><input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={(event) => { handleUpload(event.target.files?.[0]); event.target.value = ''; }} /><Image size={18} /> {uploading ? 'Nahrávám…' : 'Nahrát fotku'}</label> : <button type="button" onClick={onMissingE2EE} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-400 px-5 py-3 font-black text-gray-900 hover:bg-amber-300"><Lock size={18} /> Nastavit E2EE heslo</button>}</div>{uploadError && <p role="alert" className="mt-3 text-sm font-bold text-red-600 dark:text-red-300">{uploadError}</p>}</div>;
 }
 
 function PhotoUploadButton({ addPhoto, encryptionReady, onMissingE2EE }) {

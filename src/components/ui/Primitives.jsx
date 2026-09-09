@@ -6,7 +6,7 @@ export function Card({ children, className = '' }) {
 
 export function PillButton({ active, children, onClick }) {
   return (
-    <button type="button" onClick={onClick} className={`rounded-2xl px-3 py-1.5 text-xs font-bold transition sm:px-4 sm:py-2 sm:text-sm ${active ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20' : 'border border-gray-200 bg-white/80 hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15'}`}>
+    <button type="button" onClick={onClick} aria-pressed={Boolean(active)} className={`rounded-2xl px-3 py-1.5 text-xs font-bold transition sm:px-4 sm:py-2 sm:text-sm ${active ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20' : 'border border-gray-200 bg-white/80 hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15'}`}>
       {children}
     </button>
   );

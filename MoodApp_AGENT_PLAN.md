@@ -107,10 +107,19 @@
 - [x] Ověřit produkční build a runtime fallback bez Supabase konfigurace.
 - [x] Zopakovat lint, testy, build, audit závislostí a browser console check.
 
-### Kolo 4 – další bezpečné zlepšení (rozpracováno)
-- [ ] Rozdělit dashboard a hlavní panely z `App.jsx` po stabilních seam bez změny datového kontraktu.
-- [ ] Přidat testy pro ownership/status/challenge state derivace.
-- [ ] Provést screenshot review s autentizovanými daty, pokud bude dostupný bezpečný testovací účet.
+### Kolo 4 – další bezpečné zlepšení (hotovo)
+- [x] Opravit opakované gallery uploady: await, busy state, disabled controls, zachování captionu při chybě.
+- [x] Přidat `aria-pressed` do sdíleného `PillButton` pro filtry.
+- [x] Opravit konfliktní výšky kompaktních video karet a zachovat loading indikaci.
+- [x] Provést lint/test/build/diff kontrolu po UI slice.
+
+### Kolo 5 – další priority (blokované/rozpracované)
+- [ ] Challenge completion persistence: vyžaduje bezpečnou změnu schema/RPC a live RLS ověření.
+- [ ] Offline app-shell cache: vyžaduje návrh cache strategie bez cache privátních Supabase/signed-media dat.
+- [ ] Odstranit plaintext E2EE passphrase persistence nebo ji nahradit platform-secure storage; vyžaduje produktové rozhodnutí o UX obnovy klíče.
+- [ ] Opravit push function false-success/CORS/idempotency a scheduler concurrency v Edge Functions; vyžaduje samostatnou serverovou verifikaci/deployment.
+- [ ] Přidat bounded media hydration/LRU Blob URL cache.
+- [ ] Přidat authenticated two-user a device-level browser testy.
 
 ### Release evidence
 - [x] Commit `0ff9aed0fe934fe7607ea3ba74f972f1deb99f2c` vytvořen.

@@ -48,17 +48,17 @@ export function PostMediaCard({ post, locked, loading, blurred, category, openIm
   }
 
   return (
-    <div className={`relative overflow-hidden border border-white/20 bg-gray-950 ${compact ? 'h-56 md:h-72' : 'mt-4 min-h-72 rounded-3xl'}`}>
+    <div className={`relative overflow-hidden border border-white/20 bg-gray-950 ${compact ? 'h-56 rounded-none md:h-72' : 'mt-4 min-h-72 rounded-3xl'}`}>
       {post.signedUrl ? (
         <video
           src={post.signedUrl}
           controls
           playsInline
           preload="metadata"
-          className={`h-full min-h-72 w-full object-contain ${blurred ? 'blur-sm' : ''}`}
+          className={`h-full w-full object-contain ${blurred ? 'blur-sm' : ''}`}
         />
       ) : (
-        <div className={`grid h-full min-h-72 place-items-center p-5 text-center text-white ${loading ? 'animate-pulse' : ''}`}>
+        <div className={`grid h-full place-items-center p-5 text-center text-white ${loading ? 'animate-pulse' : ''}`}>
           <div>
             {loading ? <Video className="mx-auto mb-3" size={44} /> : <Lock className="mx-auto mb-3" size={44} />}
             <div className="font-black">{loading ? 'Připravuju video…' : locked ? 'Šifrované video' : 'Video není dostupné'}</div>
