@@ -43,7 +43,7 @@ import { PostMediaCard } from './components/media/MediaCards';
 import { DailyMomentGalleryArchive } from './features/moments/DailyMomentGalleryArchive';
 import { decryptSignedUrlToObjectUrl, encryptFileForCouple } from './lib/crypto';
 import { Card, EmptyState, PillButton, TextInput } from './components/ui/Primitives';
-import { getLocalDateKey, getRecentDateKeys, normalizeSearchText, shouldRotatePushSubscription } from './lib/productUtils';
+import { getLocalDateKey, getRecentDateKeys, getSafeErrorMessage, normalizeSearchText, shouldRotatePushSubscription } from './lib/productUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -3769,7 +3769,7 @@ function GalleryUploadForm({ addPhoto, encryptionReady, onMissingE2EE }) {
       await addPhoto(file, { text: caption, photoCategory: category });
       setCaption('');
     } catch (error) {
-      setUploadError(error?.message || 'Fotku se nepodařilo nahrát. Zkus to znovu.');
+      setUploadError(getSafeErrorMessage(error, 'Fotku se nepodařilo nahrát. Zkus to znovu.'));
     } finally {
       setUploading(false);
     }
