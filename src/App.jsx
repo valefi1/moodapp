@@ -177,18 +177,57 @@ function getTodaySeed() {
 
 const LOVINO_KAMASUTRA_URLS = {
   vodnar: 'https://www.lovino.cz/polohy/vodnar',
-  lotus: 'https://www.lovino.cz/polohy/lotosovy-kvet',
+  kyvadlo: 'https://www.lovino.cz/polohy/obkrocmo',
+  'lotosovy-kvet': 'https://www.lovino.cz/polohy/lotosovy-kvet',
   motylek: 'https://www.lovino.cz/polohy/motylek',
   'bambusovy-vyhonek': 'https://www.lovino.cz/polohy/bambusovy-vyhonek',
   'u-zdi': 'https://www.lovino.cz/polohy/u-zdi',
   tango: 'https://www.lovino.cz/polohy/tango',
   'lini-psi': 'https://www.lovino.cz/polohy/liny-pes',
+  'liny-psi': 'https://www.lovino.cz/polohy/liny-pes',
   kolebka: 'https://www.lovino.cz/polohy/kolebka',
   karamel: 'https://www.lovino.cz/polohy/karamel',
   orchidej: 'https://www.lovino.cz/polohy/orchidej',
   sfinga: 'https://www.lovino.cz/polohy/sfinga',
   pokuseni: 'https://www.lovino.cz/polohy/pokuseni',
   'kruh-69': 'https://www.lovino.cz/polohy/kruh-nebo-take-69',
+  'kruh-nebo-take-69': 'https://www.lovino.cz/polohy/kruh-nebo-take-69',
+  'pravy-uhel': 'https://www.lovino.cz/polohy/svicka',
+  'nekonecna-slast': 'https://www.lovino.cz/polohy/lodka',
+  'venusin-polibek': 'https://www.lovino.cz/polohy/kocka',
+  jantar: 'https://www.lovino.cz/polohy/disco',
+  cokolada: 'https://www.lovino.cz/polohy/tornado',
+  med: 'https://www.lovino.cz/polohy/jezdkyne',
+  perla: 'https://www.lovino.cz/polohy/sepot',
+  'nezna-vlna': 'https://www.lovino.cz/polohy/harmonie',
+  hvezda: 'https://www.lovino.cz/polohy/vodopad',
+  tanecnice: 'https://www.lovino.cz/polohy/inkvizitor',
+  vlastovka: 'https://www.lovino.cz/polohy/snezenka',
+  kompas: 'https://www.lovino.cz/polohy/rodeo',
+  samet: 'https://www.lovino.cz/polohy/jin-a-jang',
+  boure: 'https://www.lovino.cz/polohy/liny-vecer',
+  magnet: 'https://www.lovino.cz/polohy/zare',
+  'nocni-objeti': 'https://www.lovino.cz/polohy/na-baseta',
+  'polarni-zare': 'https://www.lovino.cz/polohy/snezenka',
+  obkrocmo: 'https://www.lovino.cz/polohy/obkrocmo',
+  svicka: 'https://www.lovino.cz/polohy/svicka',
+  lodka: 'https://www.lovino.cz/polohy/lodka',
+  kocka: 'https://www.lovino.cz/polohy/kocka',
+  disco: 'https://www.lovino.cz/polohy/disco',
+  tornado: 'https://www.lovino.cz/polohy/tornado',
+  jezdkyne: 'https://www.lovino.cz/polohy/jezdkyne',
+  sepot: 'https://www.lovino.cz/polohy/sepot',
+  harmonie: 'https://www.lovino.cz/polohy/harmonie',
+  vodopad: 'https://www.lovino.cz/polohy/vodopad',
+  inkvizitor: 'https://www.lovino.cz/polohy/inkvizitor',
+  snezenka: 'https://www.lovino.cz/polohy/snezenka',
+  rodeo: 'https://www.lovino.cz/polohy/rodeo',
+  'jin-a-jang': 'https://www.lovino.cz/polohy/jin-a-jang',
+  'liny-vecer': 'https://www.lovino.cz/polohy/liny-vecer',
+  zare: 'https://www.lovino.cz/polohy/zare',
+  kolo: 'https://www.lovino.cz/polohy/kolo',
+  misionarska: 'https://www.lovino.cz/polohy/misionarska-poloha',
+  'na-baseta': 'https://www.lovino.cz/polohy/na-baseta',
   misionar: 'https://www.lovino.cz/polohy/misionarska-poloha',
   'na-pejska': 'https://www.lovino.cz/polohy/na-pejska',
   lzicka: 'https://www.lovino.cz/polohy/lzicka',
@@ -348,6 +387,44 @@ const kamaPositions = [
   { id: 'kama-49', title: 'Noční objetí', pose: 'side-spoon', category: 'Vaginální', type: 'Vaginální', difficulty: 'Začátečníci', xp: 14, tag: 'Romantické', description: { setup: 'Lžičková varianta s hlubším objetím přes pas nebo hrudník. Těla zůstávají blízko a v teple.', focus: 'Ideální před spaním, po náročném dni nebo pro pomalé probouzení touhy.', comfort: 'Udržujte ramena měkká a ruce položte tak, aby nebrněly.' } },
   { id: 'kama-50', title: 'Polární záře', pose: 'side-facing', category: 'Vaginální', type: 'Vaginální', difficulty: 'Středně pokročilé', xp: 24, tag: 'Romantické', description: { setup: 'Ležení bokem s propletenýma nohama a možností lehce měnit náklon pánve.', focus: 'Romantická poloha pro pomalé objevování, mazlení a teasing. Každá malá změna úhlu může působit jinak.', comfort: 'Netlačte na ramena a kyčle. Pokud poloha začne být složitá, vraťte se k jednoduchému objetí.' } }
 ];
+
+const LINKED_POSITION_REPLACEMENTS = {
+  'kama-2': { title: 'Obkročmo', pose: 'top-facing' },
+  'kama-14': { title: 'Svíčka', pose: 'edge-bed' },
+  'kama-20': { title: 'Loďka', pose: 'side-facing' },
+  'kama-32': { title: 'Kočka', pose: 'kneeling-arch' },
+  'kama-33': { title: 'Disco', pose: 'standing-mirror' },
+  'kama-34': { title: 'Tornádo', pose: 'kneeling-arch' },
+  'kama-35': { title: 'Jezdkyně', pose: 'top-facing' },
+  'kama-37': { title: 'Šepot', pose: 'side-facing' },
+  'kama-39': { title: 'Harmonie', pose: 'side-facing' },
+  'kama-40': { title: 'Vodopád', pose: 'edge-bed' },
+  'kama-42': { title: 'Inkvizitor', pose: 'kneeling-arch' },
+  'kama-43': { title: 'Sněženka', pose: 'edge-bed' },
+  'kama-44': { title: 'Rodeo', pose: 'top-facing' },
+  'kama-45': { title: 'Jin a jang', pose: 'side-facing' },
+  'kama-46': { title: 'Líný večer', pose: 'side-spoon' },
+  'kama-47': { title: 'Záře', pose: 'standing-mirror' },
+  'kama-49': { title: 'Na Baseta', pose: 'kneeling-arch' },
+  'kama-50': { title: 'Kolo', pose: 'top-facing' },
+};
+
+const linkedReplacementDescription = (title) => ({
+  setup: `Nastavte těla podle skutečné polohy „${title}“ na Lovino.cz a začněte v pohodlné, stabilní variantě.`,
+  focus: 'Pohyb a tempo přizpůsobujte společně reakcím obou partnerů. Začněte pomalu a průběžně komunikujte.',
+  comfort: 'Použijte stabilní podložku, případně polštář jako oporu. Při bolesti nebo nejistotě polohu ihned zjednodušte.',
+});
+
+Object.entries(LINKED_POSITION_REPLACEMENTS).forEach(([id, replacement]) => {
+  const position = kamaPositions.find((item) => item.id === id);
+  if (!position) return;
+  Object.assign(position, {
+    ...replacement,
+    category: 'Vaginální',
+    type: 'Vaginální',
+    description: linkedReplacementDescription(replacement.title),
+  });
+});
 
 const navItems = [
   { id: 'home', label: 'Dnes', icon: Heart },
