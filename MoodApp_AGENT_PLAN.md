@@ -113,7 +113,16 @@
 - [x] Opravit konfliktní výšky kompaktních video karet a zachovat loading indikaci.
 - [x] Provést lint/test/build/diff kontrolu po UI slice.
 
-### Kolo 5 – další priority (blokované/rozpracované)
+### Kolo 5 – unified moments + media recovery (hotovo)
+- [x] Opravit legacy media lookup pro posty používající `media_path` místo `image_path`.
+- [x] Přidat textové status momenty do dnešního momentového view.
+- [x] Přidat archiv status momentů seskupený podle lokálního dne.
+- [x] Oddělit dnešní obsah od archivu bez duplicit.
+- [x] Skrýt prázdný archiv a odstranit nefunkční recovery tlačítko v již otevřené sekci.
+- [x] Ověřit lint, testy, build a diff check.
+- [ ] Skutečný E2EE decrypt běžných fotek je stále potřeba ověřit na konkrétním authenticated účtu; lokální browser nemá Supabase session.
+
+### Kolo 6 – další priority (blokované/rozpracované)
 - [ ] Challenge completion persistence: vyžaduje bezpečnou změnu schema/RPC a live RLS ověření.
 - [ ] Offline app-shell cache: vyžaduje návrh cache strategie bez cache privátních Supabase/signed-media dat.
 - [ ] Odstranit plaintext E2EE passphrase persistence nebo ji nahradit platform-secure storage; vyžaduje produktové rozhodnutí o UX obnovy klíče.

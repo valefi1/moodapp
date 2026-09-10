@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { PostMediaCard } from './components/media/MediaCards';
 import { DailyMomentGalleryArchive } from './features/moments/DailyMomentGalleryArchive';
+import { StatusMomentArchive } from './features/moments/StatusMomentArchive';
 import { decryptSignedUrlToObjectUrl, encryptFileForCouple } from './lib/crypto';
 import { Card, EmptyState, PillButton, TextInput } from './components/ui/Primitives';
 import { getLocalDateKey, getRecentDateKeys, getSafeErrorMessage, normalizeSearchText, shouldRotatePushSubscription } from './lib/productUtils';
@@ -940,8 +941,9 @@ export default function App() {
   }
 
   async function hydratePostMedia(post, coupleId, loadVersion) {
-    if (!post?.image_path) return;
-    const cacheKey = `${post.image_path}:${encryptionPassphrase || 'no-key'}`;
+    const mediaPath = post?.image_path || post?.media_path;
+    if (!mediaPath) return;
+    const cacheKey = `${mediaPath}:${encryptionPassphrase || 'no-key'}`;
     const cachedUrl = postMediaCache.current.get(cacheKey);
     if (cachedUrl) {
       setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: cachedUrl, locked: false, mediaLoading: false } : item));
@@ -953,7 +955,7 @@ export default function App() {
     }
 
     try {
-      const rawSignedUrl = await getSignedUrl(post.image_path);
+      const rawSignedUrl = await getSignedUrl(mediaPath);
       let displayUrl = rawSignedUrl;
       if (post.encrypted && rawSignedUrl) {
         displayUrl = await decryptSignedUrlToObjectUrl(rawSignedUrl, coupleId, encryptionPassphrase, post.encryption_iv, post.mime_type);
@@ -971,7 +973,7 @@ export default function App() {
   }
 
   async function hydratePostsMedia(sourcePosts, coupleId, loadVersion) {
-    const mediaPosts = sourcePosts.filter((post) => post.image_path);
+    const mediaPosts = sourcePosts.filter((post) => post.image_path || post.media_path);
     let index = 0;
     const worker = async () => {
       while (index < mediaPosts.length && loadVersion === postLoadVersion.current) {
@@ -1002,7 +1004,7 @@ export default function App() {
       ...post,
       signedUrl: null,
       locked: Boolean(post.encrypted && !encryptionPassphrase),
-      mediaLoading: Boolean(post.image_path),
+      mediaLoading: Boolean(post.image_path || post.media_path),
     }));
     setPosts(sourcePosts);
     setHasMorePosts(sourcePosts.length === MAX_POSTS);
@@ -1028,7 +1030,7 @@ export default function App() {
       ...post,
       signedUrl: null,
       locked: Boolean(post.encrypted && !encryptionPassphrase),
-      mediaLoading: Boolean(post.image_path),
+      mediaLoading: Boolean(post.image_path || post.media_path),
     }));
     setPosts((current) => [...current, ...olderPosts.filter((post) => !current.some((item) => item.id === post.id))]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
@@ -2178,6 +2180,11 @@ export default function App() {
     () => dailyMoments.filter((moment) => moment.moment_date === getLocalDateKey()),
     [dailyMoments]
   );
+  const statusMoments = useMemo(() => posts.filter((post) => post.type === 'status'), [posts]);
+  const todayStatusMoments = useMemo(
+    () => statusMoments.filter((post) => getLocalDateKey(new Date(post.created_at)) === getLocalDateKey()),
+    [statusMoments]
+  );
   const filteredChallenges = challenges.filter((challenge) => challengeCategory === 'all' || challenge.category === challengeCategory);
   const challengeStats = getChallengeStats(challenges, session?.user?.id, partnerDayCompletions);
 
@@ -2305,7 +2312,7 @@ export default function App() {
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} dailyMoments={dailyMoments} currentUserId={session?.user?.id} openMoments={() => setActiveTab('moments')} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} requestChallengeConfirmation={requestChallengeConfirmation} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
             {activeTab === 'more' && <MorePanel setActiveTab={setActiveTab} />}
-            {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={todayDailyMoments} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} panicMode={panicMode} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
+            {activeTab === 'moments' && <DailyMomentsPanel couple={couple} moments={todayDailyMoments} statusMoments={todayStatusMoments} statusArchive={statusMoments.filter((post) => getLocalDateKey(new Date(post.created_at)) !== getLocalDateKey())} archiveMoments={dailyMoments.filter((moment) => moment.moment_date !== getLocalDateKey())} loading={dailyMomentsLoading} loadError={dailyMomentsError} currentUserId={session?.user?.id} panicMode={panicMode} uploadMoment={uploadDailyMoment} deleteMoment={deleteDailyMoment} saveRating={saveDailyMomentRating} />}
             {activeTab === 'kamasutra' && <KamasutraPanel kamaProgress={kamaProgress} kamaFilter={kamaFilter} setKamaFilter={setKamaFilter} kamaSearch={kamaSearch} setKamaSearch={setKamaSearch} kamaDifficultyFilter={kamaDifficultyFilter} setKamaDifficultyFilter={setKamaDifficultyFilter} oralOnly={oralOnly} setOralOnly={setOralOnly} toggleKama={toggleKama} updateKamaPreference={updateKamaPreference} uploadKamaPhoto={uploadKamaPhoto} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('Kamasutra fotka')} />}
             {activeTab === 'profile' && <ProfilePanel profile={profile} couple={couple} coupleAvatarUrl={coupleAvatarUrl} profileName={profileName} setProfileName={setProfileName} updateProfileName={updateProfileName} partnerName={partnerName} uploadCoupleAvatar={uploadCoupleAvatar} encryptionPassphrase={encryptionPassphrase} saveEncryptionPassphrase={saveEncryptionPassphrase} signOut={signOut} />}
           </AppErrorBoundary>
@@ -2710,7 +2717,7 @@ function DailyMomentHomeCard({ moments, loading, currentUserId, openMoments, pri
   );
 }
 
-function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId, panicMode, uploadMoment, deleteMoment, saveRating }) {
+function DailyMomentsPanel({ couple, moments, statusMoments = [], statusArchive = [], archiveMoments = [], loading, loadError, currentUserId, panicMode, uploadMoment, deleteMoment, saveRating }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedDuration, setSelectedDuration] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -2918,6 +2925,9 @@ function DailyMomentsPanel({ couple, moments, loading, loadError, currentUserId,
           <DailyMomentCard key={`partner-${partnerMoment?.id || 'missing'}-${partnerMoment?.ratings?.map((rating) => `${rating.id}:${rating.score}:${rating.reaction}`).join('|') || ''}`} label="Moment partnera/partnerky" moment={partnerMoment} otherMoment={ownMoment} currentUserId={currentUserId} panicMode={panicMode} saveRating={saveRating} />
         </section>
       )}
+      {!loading && couple && <StatusMomentArchive posts={statusMoments} currentUserId={currentUserId} title="Dnešní status momenty" />}
+      {!loading && couple && archiveMoments.length > 0 && <DailyMomentGalleryArchive moments={archiveMoments} currentUserId={currentUserId} panicMode={panicMode} formatDate={formatDate} getStoredMomentMediaKind={getStoredMomentMediaKind} />}
+      {!loading && couple && statusArchive.length > 0 && <StatusMomentArchive posts={statusArchive} currentUserId={currentUserId} title="Archiv status momentů" />}
     </div>
   );
 }
