@@ -177,7 +177,7 @@ function getTodaySeed() {
 
 const LOVINO_KAMASUTRA_URLS = {
   vodnar: 'https://www.lovino.cz/polohy/vodnar',
-  kyvadlo: 'https://www.lovino.cz/polohy/kyvadlo',
+  'kruh-69': 'https://www.lovino.cz/polohy/kruh-nebo-take-69',
   misionar: 'https://www.lovino.cz/polohy/misionarska-poloha',
   'na-pejska': 'https://www.lovino.cz/polohy/na-pejska',
   lzicka: 'https://www.lovino.cz/polohy/lzicka',
