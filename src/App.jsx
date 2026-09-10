@@ -2124,6 +2124,29 @@ export default function App() {
     }
   }
 
+  async function disablePushNotifications() {
+    try {
+      const registration = await getServiceWorkerRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+      const endpoint = subscription ? getPushEndpoint(subscription) : null;
+
+      if (endpoint) {
+        const { error } = await supabase
+          .from('push_subscriptions')
+          .delete()
+          .eq('user_id', session.user.id)
+          .eq('endpoint', endpoint);
+        if (error) throw error;
+        await subscription.unsubscribe();
+      }
+
+      setNotificationsEnabled(false);
+      setToast('Mobilní upozornění jsou vypnutá na tomto zařízení.');
+    } catch (error) {
+      setToast(`Upozornění se nepodařilo vypnout: ${error.message}`);
+    }
+  }
+
   function saveEncryptionPassphrase(value, rememberOnDevice = false) {
     const cleanValue = value.trim();
     setEncryptionPassphrase(cleanValue);
@@ -2239,6 +2262,7 @@ export default function App() {
             setPanicMode={setPanicMode}
             notificationsEnabled={notificationsEnabled}
             enablePushNotifications={enablePushNotifications}
+            disablePushNotifications={disablePushNotifications}
             testPushNotification={testPushNotification}
             signOut={signOut}
           />
@@ -2624,7 +2648,7 @@ function PasswordRecoveryScreen({ dark, onComplete }) {
   );
 }
 
-function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, testPushNotification, signOut }) {
+function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark, setDark, panicMode, setPanicMode, notificationsEnabled, enablePushNotifications, disablePushNotifications, testPushNotification, signOut }) {
   const [actionsOpen, setActionsOpen] = useState(false);
   return (
     <header className="box-border w-full max-w-full overflow-hidden rounded-[1.5rem] border border-white/70 bg-white/80 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/10 sm:rounded-[2rem] sm:p-4 md:p-5">
@@ -2641,7 +2665,7 @@ function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark
         <div className="hidden min-w-0 shrink-0 items-center gap-1 sm:flex sm:gap-2">
           <span aria-label={encryptionReady ? 'Šifrování fotek je aktivní' : 'Chybí heslo pro šifrování fotek'} title={encryptionReady ? 'Šifrování fotek je aktivní' : 'Chybí heslo pro šifrování fotek'} className={`flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-[11px] font-black sm:h-auto sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs ${encryptionReady ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-gray-900'}`}><Lock size={15} /><span className="hidden sm:inline">{encryptionReady ? 'E2EE' : 'Bez klíče'}</span></span>
           <button type="button" aria-label={panicMode ? 'Ukázat soukromé fotky' : 'Rozmazat soukromé fotky'} aria-pressed={panicMode} title="Rozmazání soukromých fotek" onClick={() => setPanicMode(!panicMode)} className="flex h-9 shrink-0 items-center gap-1 rounded-xl bg-gray-900 px-2 text-[11px] font-black text-white dark:bg-white dark:text-gray-900 sm:h-auto sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs"><Image size={15} /><span className="hidden sm:inline">{panicMode ? 'Skrýt' : 'Ukázat'}</span></button>
-          <button type="button" aria-label={notificationsEnabled ? 'Oznámení jsou zapnutá' : 'Zapnout oznámení'} title="Nastavení oznámení" onClick={enablePushNotifications} className={`flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-[11px] font-black sm:h-auto sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}><Bell size={15} /><span className="hidden sm:inline">{notificationsEnabled ? 'Zapnuto' : 'Oznámení'}</span></button>
+          <button type="button" aria-label={notificationsEnabled ? 'Oznámení jsou zapnutá' : 'Zapnout oznámení'} title="Nastavení oznámení" onClick={notificationsEnabled ? disablePushNotifications : enablePushNotifications} className={`flex h-9 shrink-0 items-center gap-1 rounded-xl px-2 text-[11px] font-black sm:h-auto sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs ${notificationsEnabled ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}><Bell size={15} /><span className="hidden sm:inline">{notificationsEnabled ? 'Zapnuto' : 'Oznámení'}</span></button>
           {notificationsEnabled && <button type="button" title="Otestovat oznámení" onClick={testPushNotification} className="hidden rounded-xl bg-violet-500 px-2 py-2 text-[11px] font-black text-white sm:block sm:rounded-2xl sm:px-3 sm:text-xs">Test</button>}
           <button type="button" aria-label={dark ? 'Zapnout světlý režim' : 'Zapnout tmavý režim'} onClick={() => setDark(!dark)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 sm:h-10 sm:w-10 sm:rounded-2xl">{dark ? <Sun size={18} /> : <Moon size={18} />}</button>
           <button type="button" aria-label="Odhlásit se" onClick={signOut} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-gray-200 dark:border-white/10 sm:h-10 sm:w-10 sm:rounded-2xl"><LogOut size={18} /></button>
@@ -2653,7 +2677,7 @@ function CompactHeader({ encryptionReady, profile, couple, coupleAvatarUrl, dark
       </div>
       {actionsOpen && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-gray-200/70 pt-3 dark:border-white/10 sm:hidden">
         <button type="button" aria-pressed={panicMode} onClick={() => setPanicMode(!panicMode)} className="rounded-2xl bg-gray-900 px-3 py-3 text-xs font-black text-white dark:bg-white dark:text-gray-900"><Image className="mx-auto mb-1" size={16} />{panicMode ? 'Skrýt fotky' : 'Ukázat fotky'}</button>
-        <button type="button" onClick={enablePushNotifications} className={`rounded-2xl px-3 py-3 text-xs font-black text-white ${notificationsEnabled ? 'bg-emerald-500' : 'bg-pink-500'}`}><Bell className="mx-auto mb-1" size={16} />{notificationsEnabled ? 'Oznámení zapnuta' : 'Zapnout oznámení'}</button>
+        <button type="button" onClick={notificationsEnabled ? disablePushNotifications : enablePushNotifications} className={`rounded-2xl px-3 py-3 text-xs font-black text-white ${notificationsEnabled ? 'bg-emerald-500' : 'bg-pink-500'}`}><Bell className="mx-auto mb-1" size={16} />{notificationsEnabled ? 'Oznámení zapnuta' : 'Zapnout oznámení'}</button>
         {notificationsEnabled && <button type="button" onClick={testPushNotification} className="rounded-2xl bg-violet-500 px-3 py-3 text-xs font-black text-white">Test oznámení</button>}
         <button type="button" onClick={() => setDark(!dark)} className="rounded-2xl border border-gray-200 px-3 py-3 text-xs font-black dark:border-white/10">{dark ? 'Světlý režim' : 'Tmavý režim'}</button>
         <button type="button" onClick={signOut} className="col-span-2 rounded-2xl border border-rose-200 px-3 py-3 text-xs font-black text-rose-600 dark:border-rose-400/20 dark:text-rose-200"><LogOut className="mr-1 inline" size={15} /> Odhlásit se</button>
