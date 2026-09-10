@@ -482,6 +482,17 @@ const additionalKamaPositions = [
 
 kamaPositions.push(...additionalKamaPositions);
 
+const LOVINO_ORAL_POSITION_IDS = new Set([
+  'kama-31', 'kama-37', 'kama-38', 'kama-41', 'kama-42', 'kama-45',
+  'kama-47', 'kama-53', 'kama-54', 'kama-57', 'kama-58', 'kama-65',
+]);
+
+kamaPositions.forEach((position) => {
+  if (!LOVINO_ORAL_POSITION_IDS.has(position.id)) return;
+  position.category = 'Orální';
+  position.type = 'Orální';
+});
+
 const navItems = [
   { id: 'home', label: 'Dnes', icon: Heart },
   { id: 'chat', label: 'Chat', icon: Send },
