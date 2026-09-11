@@ -49,6 +49,16 @@ MOOD_REMINDER_SECRET=...
 
 Pozor: `VAPID_SUBJECT` musí být URL, typicky `mailto:...`, ne jen samotný e-mail.
 
+## Kompletní databázový setup
+
+Pokud chceš aplikaci nastavit jedním spuštěním v Supabase SQL Editoru, použij:
+
+```sql
+supabase/complete_setup.sql
+```
+
+Soubor v bezpečném pořadí spojuje databázové/storage migrace z jednotlivých setup souborů. Je navržený k opakovanému spuštění a nemaže existující data. Edge Functions, jejich secrets a scheduler se nasazují samostatně podle sekce níže.
+
 ## Supabase SQL soubory
 
 Spouštěj je v Supabase Dashboardu přes **SQL Editor**.
