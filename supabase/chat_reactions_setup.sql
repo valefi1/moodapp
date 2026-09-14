@@ -8,7 +8,7 @@ alter table public.posts
 -- Keep one reaction per author and target message. NULL reply_to_id values
 -- (all ordinary posts) remain distinct in PostgreSQL unique indexes.
 drop index if exists public.posts_one_reaction_per_user_idx;
-create unique index if not exists public.post_one_reaction_per_user_idx
+create unique index if not exists post_one_reaction_per_user_idx
   on public.posts(reply_to_id, author_id);
 
 alter table public.posts
