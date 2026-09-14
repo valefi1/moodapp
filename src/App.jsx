@@ -1121,7 +1121,7 @@ export default function App() {
       const rawSignedUrl = await getSignedUrl(mediaPath);
       let displayUrl = rawSignedUrl;
       if (post.encrypted && rawSignedUrl) {
-        displayUrl = await decryptSignedUrlToObjectUrl(rawSignedUrl, coupleId, encryptionPassphrase, post.encryption_iv, post.mime_type);
+        displayUrl = await decryptSignedUrlToObjectUrl(rawSignedUrl, coupleId, encryptionPassphrase, post.encryption_iv, post.mime_type || post.media_mime_type);
       }
       if (loadVersion !== postLoadVersion.current) {
         if (String(displayUrl || '').startsWith('blob:')) URL.revokeObjectURL(displayUrl);
@@ -1956,6 +1956,26 @@ export default function App() {
       throw galleryError;
     }
 
+    const optimisticMoment = {
+      id: moment.id,
+      couple_id: couple.id,
+      author_id: session.user.id,
+      moment_date: today,
+      media_path: mediaPath,
+      media_kind: media.kind,
+      media_mime_type: media.mimeType,
+      video_path: media.kind === 'video' ? mediaPath : null,
+      video_mime_type: media.kind === 'video' ? media.mimeType : null,
+      duration_seconds: media.duration === null ? null : Number(media.duration.toFixed(2)),
+      encrypted: true,
+      encryption_iv: encrypted.iv,
+      caption: caption.trim() || null,
+      ratings: [],
+      signedUrl: null,
+      mediaLoading: true,
+      locked: false,
+    };
+    setDailyMoments((current) => [optimisticMoment, ...current.filter((item) => item.id !== moment.id)]);
     await loadDailyMoments(couple.id);
     await loadPosts(couple.id);
     setToast('Dnešní moment je sdílený s partnerem/partnerkou.');
