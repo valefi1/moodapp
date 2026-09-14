@@ -754,7 +754,8 @@ async function uploadToStorage(file, folder, options = {}) {
 
 async function getSignedUrl(path) {
   if (!supabase || !path) return null;
-  const { data } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60 * 5);
+  const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60 * 5);
+  if (error) throw error;
   return data?.signedUrl || null;
 }
 
@@ -1128,7 +1129,7 @@ export default function App() {
       setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: displayUrl, locked: !displayUrl, mediaLoading: false } : item));
     } catch {
       if (loadVersion !== postLoadVersion.current) return;
-      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: null, locked: true, mediaLoading: false } : item));
+      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: null, locked: Boolean(post.encrypted), mediaLoading: false } : item));
     }
   }
 
@@ -1765,6 +1766,21 @@ export default function App() {
     await notifyPartner('message_added', 'MoodSync', 'Partner/ka ti poslal/a novou zprávu.');
   }
 
+  async function sendReaction(targetPost, reaction) {
+    if (!couple?.id || !session?.user?.id || !targetPost?.id || !reaction) return;
+    const { data, error } = await supabase.from('posts').insert({
+      couple_id: couple.id,
+      author_id: session.user.id,
+      type: 'reaction',
+      text: reaction,
+      reaction,
+      reply_to_id: targetPost.id,
+    }).select('*').single();
+    if (error) return setToast(`Reakci se nepodařilo uložit: ${error.message}`);
+    mergePostRecord(data);
+    await notifyPartner('message_added', 'MoodSync', 'Partner/ka reagoval/a na zprávu.');
+  }
+
   async function searchGifs(query, count = 12) {
     if (!couple?.id || !session?.user?.id) throw new Error('GIFy jsou dostupné až po připojení páru.');
     const { data, error } = await supabase.functions.invoke('redgifs-search', {
@@ -2358,7 +2374,7 @@ export default function App() {
   }, [posts, photoCategory, sortOrder]);
 
   const photoPosts = filteredPosts.filter((post) => post.type === 'photo');
-  const chatPosts = posts.filter((post) => post.type === 'chat' || post.type === 'gif');
+  const chatPosts = posts.filter((post) => post.type === 'chat' || post.type === 'gif' || post.type === 'reaction');
   const todayDailyMoments = useMemo(
     () => dailyMoments.filter((moment) => moment.moment_date === getLocalDateKey()),
     [dailyMoments]
@@ -2491,7 +2507,7 @@ export default function App() {
           )}
 
           <AppErrorBoundary resetKey={activeTab}>
-            {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} searchGifs={searchGifs} sendGif={sendGif} gifPickerEnabled={Boolean(couple?.id && session?.user?.id)} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
+            {activeTab === 'chat' && <ChatPanel posts={chatPosts} message={message} setMessage={setMessage} sendMessage={sendMessage} sendReaction={sendReaction} searchGifs={searchGifs} sendGif={sendGif} gifPickerEnabled={Boolean(couple?.id && session?.user?.id)} deletePost={deletePost} currentUserId={session?.user?.id} partnerName={partnerName} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'feed' && <FeedPanel posts={filteredPosts} currentUserId={session?.user?.id} message={message} setMessage={setMessage} sendMessage={sendMessage} addPhoto={addPhoto} deletePost={deletePost} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('feed fotka')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'gallery' && <GalleryPanel posts={photoPosts} dailyMoments={dailyMoments} currentUserId={session?.user?.id} openMoments={() => setActiveTab('moments')} addPhoto={addPhoto} deletePost={deletePost} photoCategory={photoCategory} setPhotoCategory={setPhotoCategory} sortOrder={sortOrder} setSortOrder={setSortOrder} panicMode={panicMode} openImage={setFullscreenImage} encryptionReady={encryptionReady} onMissingE2EE={() => showE2eePrompt('galerie')} hasMorePosts={hasMorePosts} loadOlderPosts={loadOlderPosts} />}
             {activeTab === 'challenges' && <ChallengesPanel challenges={filteredChallenges} allChallenges={challenges} category={challengeCategory} setCategory={setChallengeCategory} addChallenge={addChallenge} updateChallenge={updateChallenge} requestChallengeConfirmation={requestChallengeConfirmation} challengePartner={challengePartner} assignDebtTask={assignDebtTask} repayDebt={repayDebt} currentUserId={session?.user?.id} stats={challengeStats} />}
@@ -3712,8 +3728,12 @@ const quickChatMessages = [
   'Děkuju za tebe'
 ];
 
-function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, sendGif, gifPickerEnabled, deletePost, currentUserId, partnerName, hasMorePosts, loadOlderPosts }) {
-  const sortedMessages = [...posts].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+function ChatPanel({ posts = [], message, setMessage, sendMessage, sendReaction, searchGifs, sendGif, gifPickerEnabled, deletePost, currentUserId, partnerName, hasMorePosts, loadOlderPosts }) {
+  const reactionsByMessage = posts.reduce((groups, post) => {
+    if (post.type === 'reaction' && post.reply_to_id) groups[post.reply_to_id] = [...(groups[post.reply_to_id] || []), post];
+    return groups;
+  }, {});
+  const sortedMessages = posts.filter((post) => post.type !== 'reaction').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   const partnerLabel = partnerName?.trim() || 'Partner/ka';
   const messagesEndRef = useRef(null);
   const latestMessageId = sortedMessages.at(-1)?.id;
@@ -3825,11 +3845,18 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, searchGifs, s
                           <button
                             key={reaction}
                             type="button"
-                            onClick={() => sendMessage(`${reaction} reakce na zprávu`)}
+                            onClick={() => sendReaction(post, reaction)}
                             className="rounded-full bg-pink-50 px-2 py-1 text-sm transition hover:bg-pink-100 dark:bg-white/10 dark:hover:bg-white/15"
                           >
                             {reaction}
                           </button>
+                        ))}
+                      </div>
+                    )}
+                    {(reactionsByMessage[post.id] || []).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1" aria-label="Reakce na zprávu">
+                        {(reactionsByMessage[post.id] || []).map((item) => (
+                          <span key={item.id} title={`${item.author_id === currentUserId ? 'Tvoje' : partnerLabel} · ${formatDate(item.created_at)}`} className="rounded-full bg-white/70 px-2 py-0.5 text-sm text-gray-900 dark:bg-white/15 dark:text-white">{item.reaction || item.text}</span>
                         ))}
                       </div>
                     )}
