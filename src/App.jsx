@@ -1768,17 +1768,18 @@ export default function App() {
 
   async function sendReaction(targetPost, reaction) {
     if (!couple?.id || !session?.user?.id || !targetPost?.id || !reaction) return;
-    const { data, error } = await supabase.from('posts').insert({
+    const { data, error } = await supabase.from('posts').upsert({
       couple_id: couple.id,
       author_id: session.user.id,
       type: 'reaction',
       text: reaction,
       reaction,
       reply_to_id: targetPost.id,
-    }).select('*').single();
+    }, { onConflict: 'reply_to_id,author_id' }).select('*').single();
     if (error) return setToast(`Reakci se nepodařilo uložit: ${error.message}`);
     mergePostRecord(data);
-    await notifyPartner('message_added', 'MoodSync', 'Partner/ka reagoval/a na zprávu.');
+    setToast('Reakce odeslána.');
+    void notifyPartner('message_added', 'MoodSync', 'Partner/ka reagoval/a na zprávu.');
   }
 
   async function searchGifs(query, count = 12) {

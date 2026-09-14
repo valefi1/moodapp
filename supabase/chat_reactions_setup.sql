@@ -5,7 +5,8 @@ alter table public.posts
   add column if not exists reply_to_id uuid,
   add column if not exists reaction text;
 
-create index if not exists posts_reply_to_id_idx on public.posts(reply_to_id);
+create unique index if not exists posts_one_reaction_per_user_idx
+  on public.posts(reply_to_id, author_id);
 
 alter table public.posts
   drop constraint if exists posts_reaction_length_check;
