@@ -754,9 +754,14 @@ async function uploadToStorage(file, folder, options = {}) {
 
 async function getSignedUrl(path) {
   if (!supabase || !path) return null;
-  const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60 * 5);
-  if (error) throw error;
-  return data?.signedUrl || null;
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, 60 * 5);
+    if (!error && data?.signedUrl) return data.signedUrl;
+    lastError = error;
+    if (attempt === 0) await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+  throw lastError || new Error('Signed URL nebyla vytvořena.');
 }
 
 function getMomentMediaKind(file) {
@@ -2402,7 +2407,7 @@ export default function App() {
   const photoPosts = filteredPosts.filter((post) => post.type === 'photo');
   const chatPosts = posts.filter((post) => post.type === 'chat' || post.type === 'gif' || post.type === 'reaction');
   const todayDailyMoments = useMemo(
-    () => dailyMoments.filter((moment) => moment.moment_date === getLocalDateKey()),
+    () => dailyMoments.filter((moment) => moment.moment_date === getLocalDateKey() || (moment.created_at && getLocalDateKey(new Date(moment.created_at)) === getLocalDateKey())),
     [dailyMoments]
   );
   const statusMoments = useMemo(() => posts.filter((post) => post.type === 'status'), [posts]);
