@@ -5,11 +5,8 @@ alter table public.posts
   add column if not exists reply_to_id uuid,
   add column if not exists reaction text;
 
--- Keep one reaction per author and target message. NULL reply_to_id values
--- (all ordinary posts) remain distinct in PostgreSQL unique indexes.
 drop index if exists public.posts_one_reaction_per_user_idx;
-create unique index if not exists post_one_reaction_per_user_idx
-  on public.posts(reply_to_id, author_id);
+drop index if exists public.post_one_reaction_per_user_idx;
 
 alter table public.posts
   drop constraint if exists posts_reaction_length_check;
@@ -51,5 +48,22 @@ from candidates c
 where r.id = c.reaction_id
   and c.rn = 1
   and c.candidate_count = 1;
+
+-- The previous app could create several legacy rows for the same target.
+-- Keep the newest one before adding the uniqueness rule.
+delete from public.posts older
+using public.posts newer
+where older.type = 'reaction'
+  and newer.type = 'reaction'
+  and older.reply_to_id is not null
+  and older.reply_to_id = newer.reply_to_id
+  and older.author_id = newer.author_id
+  and (
+    older.created_at < newer.created_at
+    or (older.created_at = newer.created_at and older.id::text < newer.id::text)
+  );
+
+create unique index if not exists post_one_reaction_per_user_idx
+  on public.posts(reply_to_id, author_id);
 
 notify pgrst, 'reload schema';
