@@ -914,6 +914,7 @@ export default function App() {
   const statusNotifyTimers = useRef({});
   const postMediaCache = useRef(new Map());
   const dailyMomentMediaCache = useRef(new Map());
+  const dailyMomentLoadVersion = useRef(0);
   const reactionRequests = useRef(new Set());
   const postLoadVersion = useRef(0);
 
@@ -1257,6 +1258,7 @@ export default function App() {
 
   async function loadDailyMoments(coupleId) {
     if (!supabase || !coupleId) return;
+    const loadVersion = ++dailyMomentLoadVersion.current;
     setDailyMomentsLoading(true);
     setDailyMomentsError('');
     const { data, error } = await supabase
@@ -1274,45 +1276,42 @@ export default function App() {
       return;
     }
 
-    const hydrated = await Promise.all((data || []).map(async (moment) => {
+    const baseMoments = (data || []).map((moment) => ({
+      ...moment,
+      signedUrl: null,
+      mediaLoading: Boolean(getMomentStoragePath(moment)),
+      locked: Boolean(moment.encrypted && !encryptionPassphrase),
+      ratings: moment.daily_moment_ratings || [],
+    }));
+    if (loadVersion !== dailyMomentLoadVersion.current) return;
+    setDailyMoments(baseMoments);
+    setDailyMomentsLoading(false);
+
+    await Promise.all(baseMoments.map(async (moment) => {
       const mediaPath = getMomentStoragePath(moment);
       const cacheKey = `${moment.id}:${encryptionPassphrase || 'no-key'}`;
-      const cachedUrl = dailyMomentMediaCache.current.get(cacheKey);
-      if (cachedUrl) {
-        return { ...moment, signedUrl: cachedUrl, locked: false, ratings: moment.daily_moment_ratings || [] };
-      }
-      if (!mediaPath) {
-        return {
-          ...moment,
-          signedUrl: null,
-          locked: Boolean(moment.encrypted),
-          ratings: moment.daily_moment_ratings || [],
-        };
-      }
-      if (moment.encrypted && !encryptionPassphrase) {
-        return { ...moment, signedUrl: null, locked: true, ratings: moment.daily_moment_ratings || [] };
-      }
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .createSignedUrl(mediaPath, 60 * 60);
-      let displayUrl = signedError ? null : signedData?.signedUrl || null;
-      if (moment.encrypted && displayUrl) {
-        try {
-          displayUrl = await decryptSignedUrlToObjectUrl(displayUrl, coupleId, encryptionPassphrase, moment.encryption_iv, moment.media_mime_type || moment.video_mime_type);
-        } catch {
-          displayUrl = null;
+      let displayUrl = dailyMomentMediaCache.current.get(cacheKey) || null;
+      let locked = Boolean(moment.encrypted && !displayUrl);
+      if (!displayUrl && mediaPath && !(moment.encrypted && !encryptionPassphrase)) {
+        const { data: signedData, error: signedError } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .createSignedUrl(mediaPath, 60 * 60);
+        displayUrl = signedError ? null : signedData?.signedUrl || null;
+        if (moment.encrypted && displayUrl) {
+          try {
+            displayUrl = await decryptSignedUrlToObjectUrl(displayUrl, coupleId, encryptionPassphrase, moment.encryption_iv, moment.media_mime_type || moment.video_mime_type);
+          } catch {
+            displayUrl = null;
+          }
         }
+        if (displayUrl) dailyMomentMediaCache.current.set(cacheKey, displayUrl);
+        locked = Boolean(moment.encrypted && !displayUrl);
+      } else if (displayUrl) {
+        locked = false;
       }
-      if (displayUrl) dailyMomentMediaCache.current.set(cacheKey, displayUrl);
-      return {
-        ...moment,
-        signedUrl: displayUrl,
-        locked: Boolean(moment.encrypted && !displayUrl),
-        ratings: moment.daily_moment_ratings || [],
-      };
+      if (loadVersion !== dailyMomentLoadVersion.current) return;
+      setDailyMoments((current) => current.map((item) => item.id === moment.id ? { ...item, signedUrl: displayUrl, locked, mediaLoading: false } : item));
     }));
-    setDailyMoments(hydrated);
-    setDailyMomentsLoading(false);
   }
 
 
@@ -3943,9 +3942,9 @@ function FeedPanel({ posts, currentUserId, message, setMessage, sendMessage, add
 }
 
 function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, addPhoto, deletePost, photoCategory, setPhotoCategory, sortOrder, setSortOrder, panicMode, openImage, encryptionReady, onMissingE2EE, hasMorePosts, loadOlderPosts }) {
-  const showMoments = photoCategory === 'all' || photoCategory === 'moments';
-  const visiblePosts = showMoments ? posts.filter((post) => !post.daily_moment_id) : posts;
-  const galleryMoments = showMoments ? dailyMoments : [];
+  const showOnlyMoments = photoCategory === 'moments';
+  const visiblePosts = showOnlyMoments ? [] : posts.filter((post) => !post.daily_moment_id);
+  const galleryMoments = dailyMoments;
   return (
     <Card>
       <div className="mb-5">
@@ -3978,7 +3977,7 @@ function GalleryPanel({ posts, dailyMoments = [], currentUserId, openMoments, ad
 
       <E2eeInlineNotice encryptionReady={encryptionReady} onProfile={onMissingE2EE} />
       <GalleryUploadForm addPhoto={addPhoto} encryptionReady={encryptionReady} onMissingE2EE={onMissingE2EE} />
-      {galleryMoments.length > 0 && <DailyMomentGalleryArchive moments={galleryMoments} currentUserId={currentUserId} panicMode={panicMode} openMoments={openMoments} formatDate={formatDate} getStoredMomentMediaKind={getStoredMomentMediaKind} />}
+      {galleryMoments.length > 0 && <DailyMomentGalleryArchive moments={galleryMoments} currentUserId={currentUserId} panicMode={panicMode} openMoments={openMoments} formatDate={formatDate} getStoredMomentMediaKind={getStoredMomentMediaKind} title="Archiv dnešních momentů" />}
       {(visiblePosts.length > 0 || galleryMoments.length === 0) && <FeedList posts={visiblePosts} currentUserId={currentUserId} panicMode={panicMode} galleryOnly openImage={openImage} deletePost={deletePost} />}
       {hasMorePosts && <LoadOlderButton onClick={loadOlderPosts} label="Načíst starší fotky" />}
     </Card>

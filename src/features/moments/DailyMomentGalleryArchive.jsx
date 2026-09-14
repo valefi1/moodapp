@@ -1,6 +1,6 @@
 import { Eye, Heart } from 'lucide-react';
 
-export function DailyMomentGalleryArchive({ moments, currentUserId, panicMode, openMoments, formatDate, getStoredMomentMediaKind }) {
+export function DailyMomentGalleryArchive({ moments, currentUserId, panicMode, openMoments, formatDate, getStoredMomentMediaKind, title = 'Dnešní momenty' }) {
   const groups = Object.entries(moments.reduce((acc, moment) => {
     const dateKey = moment.moment_date || String(moment.created_at || '').slice(0, 10) || 'unknown';
     acc[dateKey] = [...(acc[dateKey] || []), moment];
@@ -11,7 +11,7 @@ export function DailyMomentGalleryArchive({ moments, currentUserId, panicMode, o
     <section className="mb-6 rounded-3xl border border-fuchsia-200 bg-fuchsia-50/70 p-4 dark:border-fuchsia-400/20 dark:bg-fuchsia-500/10">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-xl font-black">Dnešní momenty</h3>
+          <h3 className="text-xl font-black">{title}</h3>
           <p className="text-sm text-gray-600 dark:text-gray-300">Archiv je seskupený podle dnů, aby galerie zůstala přehledná.</p>
         </div>
         <Heart className="shrink-0 text-pink-500" fill="currentColor" />
