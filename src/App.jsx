@@ -914,6 +914,7 @@ export default function App() {
   const statusNotifyTimers = useRef({});
   const postMediaCache = useRef(new Map());
   const dailyMomentMediaCache = useRef(new Map());
+  const reactionRequests = useRef(new Set());
   const postLoadVersion = useRef(0);
 
   const isBackendReady = Boolean(supabase);
@@ -1126,7 +1127,7 @@ export default function App() {
         return;
       }
       if (displayUrl) postMediaCache.current.set(cacheKey, displayUrl);
-      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: displayUrl, locked: !displayUrl, mediaLoading: false } : item));
+      setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: displayUrl, locked: Boolean(post.encrypted && !displayUrl), mediaLoading: false } : item));
     } catch {
       if (loadVersion !== postLoadVersion.current) return;
       setPosts((current) => current.map((item) => item.id === post.id ? { ...item, signedUrl: null, locked: Boolean(post.encrypted), mediaLoading: false } : item));
@@ -1297,7 +1298,7 @@ export default function App() {
       let displayUrl = signedError ? null : signedData?.signedUrl || null;
       if (moment.encrypted && displayUrl) {
         try {
-          displayUrl = await decryptSignedUrlToObjectUrl(displayUrl, coupleId, encryptionPassphrase, moment.encryption_iv, moment.media_mime_type);
+          displayUrl = await decryptSignedUrlToObjectUrl(displayUrl, coupleId, encryptionPassphrase, moment.encryption_iv, moment.media_mime_type || moment.video_mime_type);
         } catch {
           displayUrl = null;
         }
@@ -1767,19 +1768,24 @@ export default function App() {
   }
 
   async function sendReaction(targetPost, reaction) {
-    if (!couple?.id || !session?.user?.id || !targetPost?.id || !reaction) return;
-    const { data, error } = await supabase.from('posts').upsert({
-      couple_id: couple.id,
-      author_id: session.user.id,
-      type: 'reaction',
-      text: reaction,
-      reaction,
-      reply_to_id: targetPost.id,
-    }, { onConflict: 'reply_to_id,author_id' }).select('*').single();
-    if (error) return setToast(`Reakci se nepodařilo uložit: ${error.message}`);
-    mergePostRecord(data);
-    setToast('Reakce odeslána.');
-    void notifyPartner('message_added', 'MoodSync', 'Partner/ka reagoval/a na zprávu.');
+    if (!couple?.id || !session?.user?.id || !targetPost?.id || !reaction || reactionRequests.current.has(targetPost.id)) return;
+    reactionRequests.current.add(targetPost.id);
+    try {
+      const { data, error } = await supabase.from('posts').upsert({
+        couple_id: couple.id,
+        author_id: session.user.id,
+        type: 'reaction',
+        text: reaction,
+        reaction,
+        reply_to_id: targetPost.id,
+      }, { onConflict: 'reply_to_id,author_id' }).select('*').single();
+      if (error) return setToast(`Reakci se nepodařilo uložit: ${error.message}`);
+      mergePostRecord(data);
+      setToast('Reakce odeslána.');
+      void notifyPartner('reaction_added', 'MoodSync', `${reaction} · reakce na tvoji zprávu.`);
+    } finally {
+      reactionRequests.current.delete(targetPost.id);
+    }
   }
 
   async function searchGifs(query, count = 12) {
@@ -3841,24 +3847,31 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, sendReaction,
                       ? <GifMedia post={post} compact />
                       : <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{post.text}</p>}
                     {!isMine && (
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {chatReactions.map((reaction) => (
-                          <button
-                            key={reaction}
-                            type="button"
-                            onClick={() => sendReaction(post, reaction)}
-                            className="rounded-full bg-pink-50 px-2 py-1 text-sm transition hover:bg-pink-100 dark:bg-white/10 dark:hover:bg-white/15"
-                          >
-                            {reaction}
-                          </button>
-                        ))}
+                      <div className="mt-3 rounded-2xl border border-pink-100 bg-pink-50/70 p-2 dark:border-white/10 dark:bg-white/[0.06]">
+                        <div className="mb-1 px-1 text-[11px] font-black uppercase tracking-wide text-pink-600 dark:text-pink-200">Reagovat na tuto zprávu</div>
+                        <div className="flex flex-wrap gap-1">
+                          {chatReactions.map((reaction) => (
+                            <button
+                              key={reaction}
+                              type="button"
+                              onClick={() => sendReaction(post, reaction)}
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-pink-200 bg-white px-2.5 py-1 text-base leading-none transition hover:-translate-y-0.5 hover:border-pink-400 hover:bg-pink-100 dark:border-white/15 dark:bg-white/10 dark:hover:bg-white/20"
+                              aria-label={`Reagovat ${reaction}`}
+                            >
+                              {reaction}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {(reactionsByMessage[post.id] || []).length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1" aria-label="Reakce na zprávu">
-                        {(reactionsByMessage[post.id] || []).map((item) => (
-                          <span key={item.id} title={`${item.author_id === currentUserId ? 'Tvoje' : partnerLabel} · ${formatDate(item.created_at)}`} className="rounded-full bg-white/70 px-2 py-0.5 text-sm text-gray-900 dark:bg-white/15 dark:text-white">{item.reaction || item.text}</span>
-                        ))}
+                      <div className="mt-2 rounded-2xl border border-amber-200/70 bg-amber-50/80 px-2.5 py-2 dark:border-amber-300/20 dark:bg-amber-400/10">
+                        <div className="mb-1 text-[11px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-200">Reakce u zprávy</div>
+                        <div className="flex flex-wrap gap-1">
+                          {(reactionsByMessage[post.id] || []).map((item) => (
+                            <span key={item.id} title={`${item.author_id === currentUserId ? 'Tvoje' : partnerLabel} · ${formatDate(item.created_at)}`} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-1 text-sm text-gray-900 dark:border-white/15 dark:bg-white/15 dark:text-white"><span>{item.reaction || item.text}</span><span className="text-[10px] font-bold text-gray-500 dark:text-gray-300">{item.author_id === currentUserId ? 'Ty' : partnerLabel}</span></span>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {isMine && (

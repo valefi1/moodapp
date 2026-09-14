@@ -63,7 +63,53 @@ where older.type = 'reaction'
     or (older.created_at = newer.created_at and older.id::text < newer.id::text)
   );
 
+-- Remove orphaned reaction rows before adding the self-reference.
+delete from public.posts reaction
+where reaction.type = 'reaction'
+  and reaction.reply_to_id is not null
+  and not exists (
+    select 1 from public.posts target where target.id = reaction.reply_to_id
+  );
+
+alter table public.posts
+  drop constraint if exists posts_reaction_target_check;
+
+alter table public.posts
+  add constraint posts_reaction_target_check
+  check (type <> 'reaction' or reply_to_id is not null) not valid;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'posts_reply_to_id_fkey'
+      and conrelid = 'public.posts'::regclass
+  ) then
+    alter table public.posts
+      add constraint posts_reply_to_id_fkey
+      foreign key (reply_to_id) references public.posts(id) on delete cascade;
+  end if;
+end
+$$;
+
 create unique index if not exists post_one_reaction_per_user_idx
   on public.posts(reply_to_id, author_id);
 
 notify pgrst, 'reload schema';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_rel pr
+    join pg_class c on c.oid = pr.prrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    join pg_publication p on p.oid = pr.prpubid
+    where p.pubname = 'supabase_realtime'
+      and n.nspname = 'public'
+      and c.relname = 'posts'
+  ) then
+    alter publication supabase_realtime add table public.posts;
+  end if;
+end
+$$;
