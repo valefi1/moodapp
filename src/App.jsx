@@ -7,14 +7,11 @@ import {
   Frown,
   ZapOff,
   Bell,
-  CalendarDays,
   Camera,
   Clock,
-  Dice5,
   ExternalLink,
   Eye,
   Flame,
-  Gift,
   Heart,
   Image,
   Lock,
@@ -31,7 +28,6 @@ import {
   Trophy,
   Target,
   Trash2,
-  TrendingUp,
   Upload,
   User,
   Users,
@@ -44,7 +40,7 @@ import { DailyMomentGalleryArchive } from './features/moments/DailyMomentGallery
 import { StatusMomentArchive } from './features/moments/StatusMomentArchive';
 import { decryptSignedUrlToObjectUrl, encryptFileForCouple } from './lib/crypto';
 import { Card, EmptyState, PillButton, TextInput } from './components/ui/Primitives';
-import { getLocalDateKey, getRecentDateKeys, getSafeErrorMessage, normalizeSearchText, shouldRotatePushSubscription } from './lib/productUtils';
+import { getLocalDateKey, getSafeErrorMessage, normalizeSearchText, shouldRotatePushSubscription } from './lib/productUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -78,16 +74,6 @@ const moods = [
   { id: 'angry', icon: Frown, label: 'Naštvaný/á', color: 'from-red-500 to-orange-700', tone: 'negative' },
 ];
 
-function getMoodByLabel(label) {
-  if (label === 'Flirt mood') return moods.find((mood) => mood.id === 'flirt');
-  return moods.find((mood) => mood.label === label) || moods[0];
-}
-
-function isStatusFresh(status) {
-  if (!status?.updated_at) return false;
-  return Date.now() - new Date(status.updated_at).getTime() < 24 * 60 * 60 * 1000;
-}
-
 const photoCategories = [
   { id: 'all', label: 'Všechny' },
   { id: 'boobs', label: 'Prsa' },
@@ -117,14 +103,6 @@ const rewardTiers = [
   { level: 5, title: 'Silný pár', minXp: 360, reward: 'Odemčeno: společný trezor intimity' },
 ];
 
-const partnerDayCards = [
-  {
-    task: 'Udělej dnes pro partnera jeden malý, konkrétní skutek lásky: pomoc, zpráva, objetí, kompliment nebo 10 minut plné pozornosti.',
-    xp: 10,
-  },
-];
-
-
 const dailyStatusOptions = [
   { id: 'open', label: 'Jsem otevřený/á', icon: '🟢', message: 'Dnešní status: jsem otevřený/á blízkosti a kontaktu.' },
   { id: 'soft', label: 'Potřebuju jemnost', icon: '🟡', message: 'Dnešní status: potřebuju spíš jemnost, klid a trpělivost.' },
@@ -132,12 +110,6 @@ const dailyStatusOptions = [
   { id: 'flirt', label: 'Chci flirt', icon: '🔥', message: 'Dnešní status: mám chuť flirtovat a hrát si.' },
   { id: 'talk', label: 'Chci si promluvit', icon: '💬', message: 'Dnešní status: chtěl/a bych si v klidu promluvit.' },
   { id: 'quiet', label: 'Dnes jen klid', icon: '🔴', message: 'Dnešní status: dnes prosím jen klid, bez tlaku.' },
-];
-
-const eveningRitualItems = [
-  { id: 'thermo', label: 'Nastavit teploměr', helper: 'Aktualizujte blízkost a chuť, ať se nemusíte dohadovat.' },
-  { id: 'thanks', label: 'Jedna věc díky', helper: 'Napište jednu konkrétní věc, za kterou jste dnes vděční.' },
-  { id: 'touch', label: '10 minut pro nás', helper: 'Domluvte si krátký čas bez mobilu, jen pro vás dva.' },
 ];
 
 const chatReactions = ['❤️', '🔥', '🥺', '😘', '🤗', '😂'];
@@ -153,13 +125,6 @@ const dailyMomentPrompts = [
 ];
 
 const supportedMomentMimeTypes = new Set(['video/webm', 'video/mp4', 'video/quicktime', 'video/x-m4v']);
-
-const wishCategories = [
-  { id: 'experience', label: 'Chci zažít', prefix: 'Chci zažít' },
-  { id: 'get', label: 'Chci dostat', prefix: 'Chci dostat' },
-  { id: 'try', label: 'Chci vyzkoušet', prefix: 'Chci vyzkoušet' },
-  { id: 'know', label: 'Chci, abys věděl/a', prefix: 'Chci, abys věděl/a' },
-];
 
 const surpriseIdeas = [
   { type: 'Otázka', text: 'Jaký malý dotek nebo gesto ti nejvíc dává pocit, že jsem tu pro tebe?' },
@@ -290,44 +255,10 @@ function hasVerifiedLovinoPositionUrl(position) {
   return Boolean(LOVINO_KAMASUTRA_URLS[getLovinoKamasutraSlug(position)]);
 }
 
-function getPartnerDayCard() {
-  return partnerDayCards[getTodaySeed() % partnerDayCards.length];
-}
-
 function getDailyMomentPrompt() {
   const localDate = getLocalDateKey();
   const seed = localDate.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   return dailyMomentPrompts[seed % dailyMomentPrompts.length];
-}
-
-function getRelationshipScoreData({ ownCloseness, ownHeat, partnerCloseness, partnerHeat, posts, challenges }) {
-  const recentPosts = posts.filter((post) => Date.now() - new Date(post.created_at).getTime() < 7 * 24 * 60 * 60 * 1000).length;
-  const completedChallenges = challenges.filter((challenge) => challenge.completed).length;
-  const activeChallenges = challenges.filter((challenge) => challenge.challenge_status === 'active').length;
-  const closenessScore = Math.round(((Number(ownCloseness) || 0) + (Number(partnerCloseness) || 0)) / 2);
-  const heatBalance = Math.max(0, 100 - Math.abs((Number(ownHeat) || 0) - (Number(partnerHeat) || 0)));
-  const activityScore = Math.min(100, recentPosts * 8 + completedChallenges * 6 + activeChallenges * 4);
-  const score = Math.round(closenessScore * 0.55 + heatBalance * 0.2 + activityScore * 0.25);
-  const trend = Math.max(-12, Math.min(18, Math.round((recentPosts + completedChallenges) / 2) - 3));
-  return { score: Math.max(0, Math.min(100, score)), trend };
-}
-
-function buildRelationshipHistory(posts, ownCloseness, partnerCloseness, ownHeat, partnerHeat) {
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - index));
-    const key = getLocalDateKey(date);
-    const dayPosts = posts.filter((post) => String(post.created_at || '').startsWith(key));
-    const moodPosts = dayPosts.filter((post) => post.type === 'mood');
-    const activityBoost = Math.min(20, dayPosts.length * 4);
-    const base = Math.round(((ownCloseness || 0) + (partnerCloseness || 0) + (100 - Math.abs((ownHeat || 0) - (partnerHeat || 0)))) / 3);
-    const moodBoost = Math.min(15, moodPosts.length * 5);
-    return {
-      label: date.toLocaleDateString('cs-CZ', { weekday: 'short' }),
-      value: Math.max(8, Math.min(100, base + activityBoost + moodBoost - (6 - index) * 2)),
-    };
-  });
-  return days;
 }
 
 const starterChallenges = [
@@ -495,25 +426,24 @@ kamaPositions.forEach((position) => {
 
 const navItems = [
   { id: 'home', label: 'Dnes', icon: Heart },
-  { id: 'chat', label: 'Chat', icon: Send },
-  { id: 'gallery', label: 'Fotky', icon: Image },
-  { id: 'challenges', label: 'Hry', icon: Flame },
+  { id: 'gallery', label: 'Spolu', icon: Image },
   { id: 'more', label: 'Více', icon: Sparkles },
 ];
 
 const secondaryTabs = [
   { id: 'moments', label: 'Dnešní moment', icon: Video },
-  { id: 'feed', label: 'Deník páru', icon: MessageCircle },
-  { id: 'kamasutra', label: 'Kamasutra', icon: Heart },
-  { id: 'profile', label: 'Profil', icon: User },
+  { id: 'feed', label: 'Vzpomínky', icon: MessageCircle },
+  { id: 'kamasutra', label: 'Nápady', icon: Heart },
+  { id: 'profile', label: 'Můj profil', icon: User },
 ];
 
 const validTabIds = new Set([...navItems, ...secondaryTabs].map((item) => item.id));
 
 function getInitialActiveTab(fallback = 'home') {
   if (typeof window === 'undefined') return fallback;
+  const safeFallback = validTabIds.has(fallback) ? fallback : 'home';
   const tabFromUrl = new URLSearchParams(window.location.search).get('tab');
-  return validTabIds.has(tabFromUrl) ? tabFromUrl : fallback;
+  return validTabIds.has(tabFromUrl) ? tabFromUrl : safeFallback;
 }
 
 function createPairCode() {
@@ -541,21 +471,6 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
-
-function formatTimeLeft(value) {
-  if (!value) return 'bez termínu';
-  const diff = new Date(value).getTime() - Date.now();
-  if (Number.isNaN(diff)) return 'bez termínu';
-  if (diff <= 0) return 'termín vypršel';
-  const minutes = Math.ceil(diff / 60000);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const restMinutes = minutes % 60;
-  if (hours < 24) return restMinutes ? `${hours} h ${restMinutes} min` : `${hours} h`;
-  const days = Math.floor(hours / 24);
-  const restHours = hours % 24;
-  return restHours ? `${days} d ${restHours} h` : `${days} d`;
-}
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -2492,7 +2407,7 @@ export default function App() {
 
           {postsLoading && couple && (
             <div role="status" className="flex items-center gap-2 rounded-2xl bg-white/70 px-4 py-3 text-sm font-bold text-pink-600 shadow-sm dark:bg-white/10 dark:text-pink-200">
-              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-pink-500" /> Načítám poslední zprávy…
+              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-pink-500" /> Načítám vaše data…
             </div>
           )}
 
@@ -3258,144 +3173,46 @@ function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserI
   );
 }
 
-function HomePanel({ couple, latestPartnerMoodPost, myLiveStatus, partnerLiveStatus, selectedMood, setSelectedMoodId, heat, setHeat, closeness, setCloseness, thought, setThought, addPost, activeChallenges = [], currentUserId, openChallenges, posts = [], challenges = [], wishlistItems = [], addWishlistItem, completeWishlistItem, milestones = [], addMilestone, surpriseCard, createSurprise, partnerDayCompletions = [], completePartnerDay, sendDailyStatus, completeEveningRitual, dailyMoments = [], dailyMomentsLoading, openMoments }) {
-  const freshOwnStatus = isStatusFresh(myLiveStatus) ? myLiveStatus : null;
-  const freshPartnerStatus = isStatusFresh(partnerLiveStatus) ? partnerLiveStatus : null;
-  const partnerMood = freshPartnerStatus?.mood_label ? getMoodByLabel(freshPartnerStatus.mood_label) : latestPartnerMoodPost ? getMoodByLabel(latestPartnerMoodPost.mood_label) : null;
-  const ownHeat = freshOwnStatus?.heat ?? heat;
-  const ownCloseness = freshOwnStatus?.closeness ?? closeness;
-  const partnerHeat = freshPartnerStatus?.heat ?? 0;
-  const partnerCloseness = freshPartnerStatus?.closeness ?? 0;
+function HomePanel({ sendDailyStatus, dailyMoments = [], dailyMomentsLoading, openMoments, activeChallenges = [], currentUserId, openChallenges }) {
   const incomingChallenge = activeChallenges.find((challenge) => challenge.challenge_status === 'active' && challenge.assigned_to === currentUserId && !challenge.completed) || null;
-  const outgoingCount = activeChallenges.filter((challenge) => challenge.challenge_status === 'active' && challenge.challenged_by === currentUserId && !challenge.completed).length;
-  const relationshipScore = getRelationshipScoreData({ ownCloseness, ownHeat, partnerCloseness, partnerHeat, posts, challenges });
-  const relationshipHistory = buildRelationshipHistory(posts, ownCloseness, partnerCloseness, ownHeat, partnerHeat);
-  const partnerDay = getPartnerDayCard();
-  const todayKey = getLocalDateKey();
-  const partnerDayCompletion = partnerDayCompletions.find((item) => item.user_id === currentUserId && item.completion_date === todayKey) || null;
-  const partnerDayAwardedByMe = partnerDayCompletions.find((item) => item.awarded_by === currentUserId && item.completion_date === todayKey) || null;
-  const recentDateKeys = getRecentDateKeys();
-  const recentDayKeys = new Set(posts.map((post) => String(post.created_at || '').slice(0, 10)).filter((dateKey) => recentDateKeys.has(dateKey)));
 
   return (
-    <>
-      <DailyMomentHomeCard moments={dailyMoments} loading={dailyMomentsLoading} currentUserId={currentUserId} openMoments={openMoments} primary />
-
-      <Card className="overflow-hidden bg-gradient-to-br from-pink-500 via-fuchsia-500 to-purple-600 text-white">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black backdrop-blur"><Sparkles size={15} /> Dnešní jiskra</div>
-            <h1 className="mt-3 text-3xl font-black">Jeden malý signál stačí.</h1>
-            <p className="mt-2 max-w-xl text-sm text-white/85">Řekni, jak ti je, nebo udělejte jeden krátký rituál. Bez tlaku na výkon.</p>
-          </div>
-          <div className="shrink-0 rounded-3xl bg-white/15 px-5 py-4 text-center backdrop-blur">
-            <div className="text-3xl font-black">{recentDayKeys.size}/7</div>
-            <div className="text-xs font-bold text-white/80">společných dnů</div>
-          </div>
-        </div>
-      </Card>
-
-      <TodayFocusCard
-        hasMoment={dailyMoments.length > 0}
-        hasIncomingChallenge={Boolean(incomingChallenge)}
-        outgoingChallengeCount={outgoingCount}
-        partnerDayDone={Boolean(partnerDayCompletion || partnerDayAwardedByMe)}
+    <div className="grid gap-4">
+      <DailyMomentHomeCard
+        moments={dailyMoments}
+        loading={dailyMomentsLoading}
+        currentUserId={currentUserId}
         openMoments={openMoments}
-        openChallenges={openChallenges}
+        primary
       />
 
-      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-        <DailyStatusCard sendDailyStatus={sendDailyStatus} />
-        <EveningRitualCard completeEveningRitual={completeEveningRitual} posts={posts} />
-      </section>
+      <DailyStatusCard sendDailyStatus={sendDailyStatus} />
 
-      <section className="grid min-w-0 gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-        <PartnerCard
-          name={couple ? 'Partner/ka' : 'Čeká na spárování'}
-          status={freshPartnerStatus ? `Aktualizováno ${formatDate(freshPartnerStatus.updated_at)}` : couple ? 'Čekám na první změnu' : 'Zadej párovací kód'}
-          mood={partnerMood || selectedMood}
-          heat={partnerHeat}
-          closeness={partnerCloseness}
-          note={latestPartnerMoodPost?.text || (couple ? 'Jakmile partner/ka změní náladu nebo teploměr, uvidíš to tady nahoře.' : 'Pár zatím není propojený.')}
-          waiting={!couple || !freshPartnerStatus}
-          highlight
-        />
-        <Card>
-          <h2 className="flex items-center gap-2 text-xl font-black"><Heart className="text-pink-500" /> Jak mi právě je</h2>
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-            {moods.map((mood) => {
-              const Icon = mood.icon;
-              return <button type="button" aria-label={mood.label} title={mood.label} key={mood.id} onClick={() => setSelectedMoodId(mood.id)} className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-md transition ${mood.color} ${selectedMood.id === mood.id ? 'scale-105 ring-4 ring-pink-200 dark:ring-white/30' : 'opacity-70 hover:opacity-100'}`}><Icon size={22} /></button>;
-            })}
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black">Dnešní úkol</h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">
+              Jeden malý krok pro vás dva. Nic dalšího dnes nemusíte řešit.
+            </p>
           </div>
-          <div className="mt-4 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-3">
-            <CompactMeter title="Blízkost" value={closeness} setValue={setCloseness} />
-            <CompactMeter title="Nadrženost" value={heat} setValue={setHeat} />
-          </div>
-          <textarea value={thought} onChange={(event) => setThought(event.target.value)} placeholder="Myšlenka pro partnera..." className="mt-4 min-h-[96px] w-full rounded-3xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white" />
-          <button onClick={addPost} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-pink-500 px-5 py-3 font-black text-white shadow-lg hover:bg-pink-600"><Send size={18} /> Sdílet myšlenku do feedu</button>
-        </Card>
-      </section>
-
-      <ActiveChallengeHomeCard challenge={incomingChallenge} outgoingCount={outgoingCount} openChallenges={openChallenges} />
-
-      <details className="group rounded-[1.5rem] border border-white/70 bg-white/70 shadow-lg backdrop-blur dark:border-white/10 dark:bg-white/[0.06] sm:rounded-[2rem]">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-black"><span className="flex items-center gap-2"><Gift className="text-pink-500" /> Inspirace a společná hra</span><span className="text-sm text-pink-500 group-open:hidden">Rozbalit</span><span className="hidden text-sm text-pink-500 group-open:inline">Sbalit</span></summary>
-        <div className="grid gap-4 border-t border-pink-100 p-4 dark:border-white/10 sm:p-5">
-          <PartnerDayCard card={partnerDay} awardedByMe={partnerDayAwardedByMe} myAward={partnerDayCompletion} completePartnerDay={completePartnerDay} />
-          <section className="grid gap-4 lg:grid-cols-2">
-            <WishlistHomeCard items={wishlistItems} currentUserId={currentUserId} addWishlistItem={addWishlistItem} completeWishlistItem={completeWishlistItem} />
-            <SurpriseHomeCard surprise={surpriseCard} createSurprise={createSurprise} />
-          </section>
+          <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-100">Volitelné</span>
         </div>
-      </details>
-
-      <details className="group rounded-[1.5rem] border border-white/70 bg-white/70 shadow-lg backdrop-blur dark:border-white/10 dark:bg-white/[0.06] sm:rounded-[2rem]">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-black"><span className="flex items-center gap-2"><TrendingUp className="text-purple-500" /> Náš přehled a vzpomínky</span><span className="text-sm text-pink-500 group-open:hidden">Rozbalit</span><span className="hidden text-sm text-pink-500 group-open:inline">Sbalit</span></summary>
-        <div className="grid gap-4 border-t border-pink-100 p-4 dark:border-white/10 sm:p-5">
-          <RelationshipScoreCard score={relationshipScore.score} trend={relationshipScore.trend} history={relationshipHistory} />
-          <MilestonesHomeCard milestones={milestones} addMilestone={addMilestone} />
-          <RelationshipOverview ownHeat={ownHeat} ownCloseness={ownCloseness} partnerHeat={partnerHeat} partnerCloseness={partnerCloseness} hasPartnerMood={Boolean(freshPartnerStatus)} />
-        </div>
-      </details>
-    </>
+        {incomingChallenge ? (
+          <button type="button" onClick={openChallenges} className="mt-4 w-full rounded-2xl bg-pink-500 px-5 py-4 text-left font-black text-white shadow-lg hover:bg-pink-600">
+            <span className="block text-xs font-bold text-white/80">Čeká na tebe</span>
+            <span className="mt-1 block">{incomingChallenge.title || 'Otevřít dnešní úkol'} →</span>
+          </button>
+        ) : (
+          <button type="button" onClick={openChallenges} className="mt-4 w-full rounded-2xl border border-pink-200 bg-pink-50 px-5 py-4 text-left font-black text-pink-700 hover:bg-pink-100 dark:border-white/10 dark:bg-white/5 dark:text-pink-100">
+            <span className="block">Vybrat malý úkol</span>
+            <span className="mt-1 block text-xs font-bold opacity-70">Jen pokud na něj máte chuť →</span>
+          </button>
+        )}
+      </Card>
+    </div>
   );
 }
-
-function TodayFocusCard({ hasMoment, hasIncomingChallenge, outgoingChallengeCount, partnerDayDone, openMoments, openChallenges }) {
-  const steps = [
-    { number: '1', label: 'Dnešní moment', detail: hasMoment ? 'Moment je připravený' : 'Ještě jste nic nepřidali', done: hasMoment, action: openMoments, actionLabel: hasMoment ? 'Otevřít' : 'Přidat' },
-    { number: '2', label: 'Malý skutek', detail: partnerDayDone ? 'Dnešní aktivita je uzavřená' : 'Jeden konkrétní skutek pro partnera', done: partnerDayDone, action: undefined, actionLabel: undefined },
-    { number: '3', label: 'Výzvy', detail: hasIncomingChallenge ? 'Čeká na tebe aktivní výzva' : outgoingChallengeCount > 0 ? `${outgoingChallengeCount} výzva čeká na partnera` : 'Žádná aktivní výzva', done: false, action: openChallenges, actionLabel: 'Zobrazit' },
-  ];
-
-  return (
-    <Card className="border-pink-200 bg-white/90 dark:border-white/10 dark:bg-white/[0.07]">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="text-xs font-black uppercase tracking-[0.16em] text-pink-500">Dnešní plán</div>
-          <h2 className="mt-1 text-2xl font-black">Co je teď důležité</h2>
-        </div>
-        <p className="text-sm text-gray-500 dark:text-gray-300">Nemusíte splnit všechno. Stačí jeden krok.</p>
-      </div>
-      <div className="mt-4 grid gap-2 lg:grid-cols-3">
-        {steps.map((step) => (
-          <div key={step.number} className={`rounded-2xl border p-3 ${step.done ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-400/30 dark:bg-emerald-400/10' : 'border-pink-100 bg-pink-50/70 dark:border-white/10 dark:bg-white/5'}`}>
-            <div className="flex items-start gap-3">
-              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${step.done ? 'bg-emerald-500 text-white' : 'bg-pink-500 text-white'}`}>{step.done ? '✓' : step.number}</span>
-              <div className="min-w-0">
-                <div className="font-black">{step.label}</div>
-                <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{step.detail}</div>
-                {step.action && <button type="button" onClick={step.action} className="mt-2 text-xs font-black text-pink-600 underline underline-offset-2 dark:text-pink-200">{step.actionLabel} →</button>}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
 
 function DailyStatusCard({ sendDailyStatus }) {
   return (
@@ -3422,342 +3239,6 @@ function DailyStatusCard({ sendDailyStatus }) {
     </Card>
   );
 }
-
-function EveningRitualCard({ completeEveningRitual, posts = [] }) {
-  const todayKey = getLocalDateKey();
-  const doneToday = posts.filter((post) => post.type === 'ritual' && String(post.created_at || '').startsWith(todayKey));
-  return (
-    <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-500/10 dark:to-pink-500/10">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-black"><Moon className="text-purple-500" /> Dnes pro nás</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Krátký večerní rituál: ne všechno musí být splněné, stačí jeden malý krok.</p>
-        </div>
-        <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-black text-purple-700 dark:bg-white/10 dark:text-purple-100">{doneToday.length}/{eveningRitualItems.length}</span>
-      </div>
-      <div className="mt-4 grid gap-2">
-        {eveningRitualItems.map((item) => {
-          const done = doneToday.some((post) => String(post.text || '').includes(item.label));
-          return (
-            <button
-              key={item.id}
-              type="button"
-              disabled={done}
-              onClick={() => completeEveningRitual?.(item)}
-              className={`rounded-2xl border p-3 text-left transition ${done ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-100' : 'border-purple-100 bg-white/80 hover:bg-purple-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10'}`}
-            >
-              <div className="font-black">{done ? '✓ ' : ''}{item.label}</div>
-              <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">{item.helper}</div>
-            </button>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-
-function RelationshipScoreCard({ score, trend, history }) {
-  return (
-    <Card className="bg-gradient-to-br from-white/90 to-pink-50/90 dark:from-white/[0.08] dark:to-fuchsia-500/[0.08]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-200">
-            <TrendingUp size={15} /> Vztahové skóre
-          </div>
-          <div className="mt-3 text-6xl font-black tracking-tight text-gray-900 dark:text-white">{score}%</div>
-          <p className="mt-1 text-sm font-bold text-gray-500 dark:text-gray-300">{trend >= 0 ? `↗ +${trend} % oproti minulému týdnu` : `↘ ${trend} % oproti minulému týdnu`}</p>
-        </div>
-        <div className="grid h-20 w-20 shrink-0 place-items-center rounded-[1.5rem] bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-xl">
-          <Heart size={34} />
-        </div>
-      </div>
-      <div className="mt-5 flex h-28 items-end gap-2 rounded-3xl bg-white/70 p-3 dark:bg-white/5">
-        {history.map((item) => (
-          <div key={item.label} className="flex flex-1 flex-col items-center gap-2">
-            <div className="w-full rounded-t-2xl bg-gradient-to-t from-pink-500 to-purple-500" style={{ height: `${Math.max(12, item.value)}%` }} />
-            <span className="text-[10px] font-black text-gray-500 dark:text-gray-400">{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function PartnerDayCard({ card, awardedByMe, myAward, completePartnerDay }) {
-  const awarded = Boolean(awardedByMe);
-  return (
-    <Card className="bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 text-white">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-black backdrop-blur">
-            <Sparkles size={15} /> Partner dne
-          </div>
-          <h3 className="mt-4 text-2xl font-black">Jeden denní úkol</h3>
-        </div>
-        <div className="rounded-full bg-white px-3 py-1 text-xs font-black text-pink-600">+{card.xp} XP</div>
-      </div>
-      <div className="mt-4 rounded-2xl bg-white/15 p-4 text-sm leading-relaxed">
-        <b>Dnešní úkol:</b> {card.task}
-      </div>
-      {myAward && (
-        <div className="mt-3 rounded-2xl bg-emerald-400/20 p-3 text-sm font-bold text-white">
-          Partner/ka ti dnes udělil/a +{myAward.xp || card.xp} XP.
-        </div>
-      )}
-      <button
-        type="button"
-        disabled={awarded}
-        onClick={() => completePartnerDay?.(card)}
-        className={`mt-4 w-full rounded-2xl px-5 py-3 text-sm font-black transition ${awarded ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-pink-600 hover:bg-pink-50'}`}
-      >
-        {awarded ? `✓ Partnerovi uděleno +${awardedByMe?.xp || card.xp} XP` : `Udělit partnerovi +${card.xp} XP`}
-      </button>
-      <p className="mt-3 text-xs text-white/75">Body si člověk nepřidává sám. Každý den můžeš dát body partnerovi/partnerce, když úkol opravdu proběhl.</p>
-    </Card>
-  );
-}
-
-function WishlistHomeCard({ items, currentUserId, addWishlistItem, completeWishlistItem }) {
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState(wishCategories[0].id);
-  const openItems = items.filter((item) => !item.fulfilled).slice(0, 6);
-  const selectedCategory = wishCategories.find((item) => item.id === category) || wishCategories[0];
-  function submit() {
-    const cleanTitle = title.trim();
-    if (!cleanTitle) return;
-    const normalizedTitle = cleanTitle.toLowerCase().startsWith(selectedCategory.prefix.toLowerCase())
-      ? cleanTitle
-      : `${selectedCategory.prefix}: ${cleanTitle}`;
-    addWishlistItem?.(normalizedTitle);
-    setTitle('');
-  }
-  return (
-    <Card>
-      <h3 className="flex items-center gap-2 text-xl font-black"><Gift className="text-pink-500" /> Přáníčka</h3>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Přání už nejsou jen seznam. Vyber kategorii a dej partnerovi jasnější signál, co by ti udělalo radost.</p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {wishCategories.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setCategory(item.id)}
-            className={`rounded-full px-4 py-2 text-xs font-black transition ${category === item.id ? 'bg-pink-500 text-white' : 'bg-pink-50 text-pink-700 dark:bg-white/10 dark:text-pink-100'}`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <TextInput value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} placeholder={`${selectedCategory.label.toLowerCase()}...`} />
-        <button onClick={submit} className="shrink-0 rounded-2xl bg-pink-500 px-4 py-2 font-black text-white">Přidat</button>
-      </div>
-      <div className="mt-4 grid gap-2">
-        {openItems.length === 0 && <div className="rounded-2xl bg-pink-50 p-4 text-sm font-bold text-gray-500 dark:bg-white/5 dark:text-gray-300">Zatím žádná otevřená přáníčka.</div>}
-        {openItems.map((item) => (
-          <div key={item.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-pink-100 bg-white/80 p-3 dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="whitespace-normal break-words font-black leading-snug">{item.title}</div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.user_id === currentUserId ? 'Moje přáníčko' : 'Přáníčko partnera/partnerky'}</div>
-            </div>
-            <div className="flex w-full shrink-0 gap-2 sm:w-auto">
-              <button onClick={() => completeWishlistItem?.(item)} className="flex-1 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-white sm:flex-none">Splnit</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function SurpriseHomeCard({ surprise, createSurprise }) {
-  return (
-    <Card>
-      <h3 className="flex items-center gap-2 text-xl font-black"><Dice5 className="text-purple-500" /> Překvap nás</h3>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Jedním klikem vyberete otázku, mini výzvu, romantický nápad nebo Kamasutra tip.</p>
-      <div className="mt-4 rounded-3xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-5 dark:from-purple-500/20 dark:to-pink-500/20">
-        {surprise ? (
-          <>
-            <div className="text-xs font-black uppercase tracking-wide text-pink-500">{surprise.type}</div>
-            <div className="mt-2 text-lg font-black">{surprise.text}</div>
-          </>
-        ) : (
-          <div className="text-sm font-bold text-gray-500 dark:text-gray-300">Zatím není vybrané žádné překvapení.</div>
-        )}
-      </div>
-      <button onClick={createSurprise} className="mt-4 w-full rounded-2xl bg-purple-500 px-5 py-3 font-black text-white">Vygenerovat překvapení</button>
-    </Card>
-  );
-}
-
-function MilestonesHomeCard({ milestones, addMilestone }) {
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState('');
-  const upcoming = [...milestones].sort((a, b) => nextOccurrence(a.date) - nextOccurrence(b.date)).slice(0, 3);
-  function submit() {
-    if (!title.trim() || !date) return;
-    addMilestone?.(title, date);
-    setTitle('');
-    setDate('');
-  }
-  return (
-    <Card>
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <h3 className="flex items-center gap-2 text-xl font-black"><CalendarDays className="text-pink-500" /> Naše důležité dny</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Výročí, první rande, svatba nebo společná dovolená.</p>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-[1fr_160px_auto]">
-          <TextInput value={title} onChange={(event) => setTitle(event.target.value)} placeholder="První rande" />
-          <TextInput type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          <button onClick={submit} className="rounded-2xl bg-gray-900 px-4 py-3 font-black text-white dark:bg-white dark:text-gray-900">Přidat</button>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        {upcoming.length === 0 && <div className="rounded-2xl bg-pink-50 p-4 text-sm font-bold text-gray-500 dark:bg-white/5 dark:text-gray-300">Zatím nemáte uložené žádné důležité dny.</div>}
-        {upcoming.map((item) => (
-          <div key={item.id} className="rounded-3xl border border-pink-100 bg-pink-50 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="font-black">{item.title}</div>
-            <div className="mt-1 text-sm text-gray-500 dark:text-gray-300">{new Date(item.date).toLocaleDateString('cs-CZ')}</div>
-            <div className="mt-3 rounded-full bg-white px-3 py-1 text-xs font-black text-pink-700 dark:bg-white/10 dark:text-pink-200">za {daysUntil(item.date)} dní</div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function nextOccurrence(dateString) {
-  const source = new Date(dateString);
-  const now = new Date();
-  const next = new Date(now.getFullYear(), source.getMonth(), source.getDate());
-  if (next < new Date(now.getFullYear(), now.getMonth(), now.getDate())) next.setFullYear(next.getFullYear() + 1);
-  return next;
-}
-
-function daysUntil(dateString) {
-  const diff = nextOccurrence(dateString).getTime() - new Date().setHours(0, 0, 0, 0);
-  return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
-}
-
-
-function ActiveChallengeHomeCard({ challenge, outgoingCount, openChallenges }) {
-  if (!challenge && !outgoingCount) return null;
-
-  return (
-    <Card className="border-pink-400/60 bg-gradient-to-br from-pink-500/15 via-purple-500/15 to-rose-500/10 dark:border-pink-500/30 dark:from-pink-500/15 dark:via-purple-500/15 dark:to-rose-500/10">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="inline-flex items-center gap-2 rounded-full bg-pink-500 px-3 py-1 text-xs font-black text-white shadow-lg shadow-pink-500/20">
-            <Clock size={15} /> Aktivní výzva
-          </div>
-          {challenge ? (
-            <>
-              <h3 className="mt-3 text-2xl font-black">Partner/ka tě vyzval/a</h3>
-              <p className="mt-2 text-base font-bold text-gray-700 dark:text-gray-200">{challenge.title}</p>
-              <div className="mt-3 flex flex-wrap gap-2 text-sm font-black">
-                <span className="rounded-full bg-white px-3 py-2 text-pink-700 dark:bg-white/10 dark:text-pink-200">Zbývá: {formatTimeLeft(challenge.challenge_deadline)}</span>
-                <span className="rounded-full bg-white px-3 py-2 text-purple-700 dark:bg-white/10 dark:text-purple-200">Odměna +{challenge.xp || 10} XP</span>
-                <span className="rounded-full bg-white px-3 py-2 text-amber-700 dark:bg-white/10 dark:text-amber-200">Nesplnění -{challenge.penalty_points || challenge.xp || 10}</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <h3 className="mt-3 text-2xl font-black">Čekáš na partnera/partnerku</h3>
-              <p className="mt-2 text-base font-bold text-gray-700 dark:text-gray-200">Máš aktivní odeslané výzvy: {outgoingCount}. Sleduj jejich stav v sekci Výzvy.</p>
-            </>
-          )}
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:min-w-[320px]">
-          {challenge && (
-            <div className="rounded-2xl bg-white p-4 text-sm font-bold text-gray-700 dark:bg-white/10 dark:text-gray-200">
-              Až výzvu splníš, partner/ka ti body udělí ze svého účtu. Body si nepřidáváš sám/sama.
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={openChallenges}
-            className="rounded-2xl bg-gray-900 px-5 py-3 font-black text-white dark:bg-white dark:text-gray-900"
-          >
-            Zobrazit výzvy
-          </button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function CompactMeter({ title, value, setValue }) {
-  return (
-    <div className="min-w-0 rounded-3xl bg-gradient-to-br from-pink-400 via-rose-500 to-purple-600 p-4 text-center text-white shadow-xl">
-      <div className="text-xs font-bold uppercase tracking-wide text-white/80">{title}</div>
-      <div className="text-4xl font-black sm:text-5xl">{value}%</div>
-      <input aria-label={title} aria-valuetext={`${value} procent`} value={value} onChange={(event) => setValue(Number(event.target.value))} type="range" min="0" max="100" className="mt-4 block w-full min-w-0 accent-white" />
-    </div>
-  );
-}
-
-function RelationshipOverview({ ownHeat, ownCloseness, partnerHeat, partnerCloseness, hasPartnerMood }) {
-  return (
-    <Card>
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <h2 className="text-2xl font-black">Společný vztahový přehled</h2>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">
-            Hodnoty se aktualizují přímo ze sliderů každého partnera, bez nutnosti posílat náladu do feedu.
-          </p>
-        </div>
-        {!hasPartnerMood && <div className="rounded-2xl bg-amber-100 px-4 py-3 text-sm font-black text-amber-700 dark:bg-amber-500/20 dark:text-amber-200">Čekám na první změnu teploměru partnera/partnerky</div>}
-      </div>
-      <div className="mt-5 grid min-w-0 gap-4 md:grid-cols-2">
-        <CompareBar label="Blízkost" leftLabel="Já" rightLabel="Partner/ka" left={ownCloseness} right={partnerCloseness} icon={<Heart size={18} />} />
-        <CompareBar label="Nadrženost" leftLabel="Já" rightLabel="Partner/ka" left={ownHeat} right={partnerHeat} icon={<Flame size={18} />} />
-      </div>
-    </Card>
-  );
-}
-
-function CompareBar({ label, leftLabel, rightLabel, left, right, icon }) {
-  return (
-    <div className="rounded-3xl border border-pink-100 bg-pink-50 p-4 dark:border-white/10 dark:bg-white/5">
-      <div className="mb-4 flex items-center gap-2 font-black">{icon}{label}</div>
-      <div className="space-y-3">
-        <MiniBar label={leftLabel} value={left} />
-        <MiniBar label={rightLabel} value={right} />
-      </div>
-    </div>
-  );
-}
-
-function MiniBar({ label, value }) {
-  return (
-    <div>
-      <div className="mb-1 flex justify-between text-sm font-bold"><span>{label}</span><span>{value}%</span></div>
-      <div className="h-3 overflow-hidden rounded-full bg-white dark:bg-white/10">
-        <div className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-500" style={{ width: `${value}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function PartnerCard({ name, status, mood, heat, closeness, note, waiting, highlight = false }) {
-  const Icon = mood?.icon || User;
-  return <Card className={highlight ? 'border-pink-300 dark:border-pink-500/30' : ''}><div className="flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-lg">{waiting ? <User size={28} /> : <Icon size={28} />}</div><div><h3 className="text-xl font-black">{name}</h3><p className="text-sm text-gray-500 dark:text-gray-300">{status}</p></div></div>{waiting ? <Lock className="text-gray-400" /> : <Icon className="text-pink-500" />}</div><p className="mt-5 rounded-2xl bg-pink-50 p-4 text-gray-700 dark:bg-white/10 dark:text-gray-200">{note}</p><div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-3"><StatBar label="Blízkost" value={waiting ? 0 : closeness} icon={<Heart size={16} />} /><StatBar label="Nadrženost" value={waiting ? 0 : heat} icon={<Flame size={16} />} /></div></Card>;
-}
-
-function StatBar({ label, value, icon }) {
-  return <div className="rounded-2xl border border-white/60 bg-white/70 p-4 dark:border-white/10 dark:bg-white/10"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300">{icon}{label}</div><span className="font-black">{value}%</span></div><div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-200/70 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-pink-400 to-rose-500" style={{ width: `${value}%` }} /></div></div>;
-}
-
-
-const quickChatMessages = [
-  'Myslím na tebe ❤️',
-  'Potřebuju obejmout',
-  'Mám chuť na tebe',
-  'Miluju tě',
-  'Máš dnes večer chvilku jen pro nás?',
-  'Děkuju za tebe'
-];
 
 function ChatPanel({ posts = [], message, setMessage, sendMessage, sendReaction, searchGifs, sendGif, gifPickerEnabled, deletePost, currentUserId, partnerName, hasMorePosts, loadOlderPosts }) {
   const reactionsByMessage = posts.reduce((groups, post) => {
@@ -3836,18 +3317,6 @@ function ChatPanel({ posts = [], message, setMessage, sendMessage, sendReaction,
           <div className="shrink-0 rounded-2xl bg-pink-50 px-3 py-2 text-xs font-bold text-pink-700 dark:bg-white/10 dark:text-pink-100 sm:text-sm">
             {sortedMessages.length} zpráv
           </div>
-        </div>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          {quickChatMessages.map((text) => (
-            <button
-              key={text}
-              type="button"
-              onClick={() => sendMessage(text)}
-              className="shrink-0 rounded-full border border-pink-100 bg-white px-3 py-1.5 text-xs font-bold text-pink-600 shadow-sm transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/10 dark:text-pink-100 dark:hover:bg-white/15 sm:px-4 sm:py-2 sm:text-sm"
-            >
-              {text}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -4708,7 +4177,7 @@ function ProfilePanel({ profile, couple, coupleAvatarUrl, profileName, setProfil
 
 function BottomNav({ activeTab, setActiveTab }) {
   const secondaryActive = secondaryTabs.some((item) => item.id === activeTab);
-  return <nav aria-label="Hlavní navigace" className="fixed bottom-[calc(.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-5 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/70 sm:max-w-2xl sm:p-3">{navItems.map((item) => { const Icon = item.icon; const active = activeTab === item.id || (item.id === 'more' && secondaryActive); return <button type="button" aria-current={active ? 'page' : undefined} aria-label={item.label} key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-2 py-2 transition sm:px-4 ${active ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon aria-hidden="true" size={20} /><span className="max-w-full truncate text-[10px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
+  return <nav aria-label="Hlavní navigace" className="fixed bottom-[calc(.75rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 box-border px-2 sm:bottom-4 sm:px-4"><div className="mx-auto grid w-full max-w-[calc(100vw-1rem)] grid-cols-3 gap-1 rounded-3xl border border-white/70 bg-white/90 p-2 shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-black/70 sm:max-w-2xl sm:p-3">{navItems.map((item) => { const Icon = item.icon; const active = activeTab === item.id || (item.id === 'more' && secondaryActive); return <button type="button" aria-current={active ? 'page' : undefined} aria-label={item.label} key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-0 flex-col items-center gap-1 rounded-2xl px-2 py-2 transition sm:px-4 ${active ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/20' : 'hover:bg-pink-50 dark:hover:bg-white/10'}`}><Icon aria-hidden="true" size={20} /><span className="max-w-full truncate text-[10px] font-bold sm:text-xs">{item.label}</span></button>; })}</div></nav>;
 }
 
 function MorePanel({ setActiveTab }) {
