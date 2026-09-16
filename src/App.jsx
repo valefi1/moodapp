@@ -104,12 +104,12 @@ const rewardTiers = [
 ];
 
 const dailyStatusOptions = [
-  { id: 'open', label: 'Jsem otevřený/á', icon: '🟢', message: 'Dnešní status: jsem otevřený/á blízkosti a kontaktu.' },
-  { id: 'soft', label: 'Potřebuju jemnost', icon: '🟡', message: 'Dnešní status: potřebuju spíš jemnost, klid a trpělivost.' },
-  { id: 'hug', label: 'Chci obejmout', icon: '🤗', message: 'Dnešní status: nejvíc by mi pomohlo objetí a blízkost.' },
-  { id: 'flirt', label: 'Chci flirt', icon: '🔥', message: 'Dnešní status: mám chuť flirtovat a hrát si.' },
-  { id: 'talk', label: 'Chci si promluvit', icon: '💬', message: 'Dnešní status: chtěl/a bych si v klidu promluvit.' },
-  { id: 'quiet', label: 'Dnes jen klid', icon: '🔴', message: 'Dnešní status: dnes prosím jen klid, bez tlaku.' },
+  { id: 'hug', label: 'Chci obejmout', icon: '🤗', message: 'Dnešní přání: chci objetí a blízkost.' },
+  { id: 'massage', label: 'Chci masáž', icon: '💆', message: 'Dnešní přání: chci masáž a příjemný dotek.' },
+  { id: 'romantic', label: 'Chci romantiku', icon: '🌹', message: 'Dnešní přání: chci romantiku a hezký čas spolu.' },
+  { id: 'flirt', label: 'Chci flirt', icon: '🔥', message: 'Dnešní přání: mám chuť flirtovat a hrát si.' },
+  { id: 'hard', label: 'Chci to tvrdě', icon: '⚡', message: 'Dnešní přání: mám chuť na intenzivnější a tvrdší chvíle.' },
+  { id: 'quiet', label: 'Dnes chci klid', icon: '🌙', message: 'Dnešní přání: dnes chci klid, jemnost a žádný tlak.' },
 ];
 
 const chatReactions = ['❤️', '🔥', '🥺', '😘', '🤗', '😂'];
