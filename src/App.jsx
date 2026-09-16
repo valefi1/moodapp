@@ -1747,17 +1747,18 @@ export default function App() {
 
 
   async function sendDailyStatus(status) {
-    if (!couple?.id || !session?.user?.id || !status?.message) return;
+    if (!couple?.id || !session?.user?.id || !status?.message) return false;
     const { data, error } = await supabase.from('posts').insert({
       couple_id: couple.id,
       author_id: session.user.id,
       type: 'status',
       text: `${status.icon} ${status.message}`,
     }).select('*').single();
-    if (error) return setToast(error.message);
+    if (error) { setToast(error.message); return false; }
     mergePostRecord(data);
     await notifyPartner('daily_status', 'MoodSync status', `${status.icon} ${status.label}`);
     setToast(`Status odeslán: ${status.label}`);
+    return true;
   }
 
   async function completeEveningRitual(item) {
@@ -3165,6 +3166,7 @@ function DailyMomentCard({ label, moment, otherMoment, own = false, currentUserI
               <textarea value={reaction} onChange={(event) => setReaction(event.target.value)} maxLength={280} placeholder="Napiš krátkou reakci…" className="mt-3 min-h-24 w-full rounded-2xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-4 focus:ring-pink-200 dark:border-white/10 dark:bg-gray-900 dark:text-white" />
               <div className="mt-1 text-right text-xs text-gray-400">{reaction.length}/280</div>
               <button type="button" disabled={saving || score < 1} onClick={handleRatingSave} className="mt-2 w-full rounded-2xl bg-pink-500 px-5 py-3 font-black text-white disabled:opacity-50">{saving ? 'Ukládám…' : existingRating ? 'Uložit změny' : 'Uložit hodnocení'}</button>
+              {existingRating && <div className="mt-3 rounded-2xl bg-emerald-50 p-3 text-sm dark:bg-emerald-500/10"><div className="font-black text-emerald-700 dark:text-emerald-200">✓ Hodnocení je uložené: {existingRating.score}/5 srdcí</div>{existingRating.reaction && <p className="mt-1 text-gray-600 dark:text-gray-300">„{existingRating.reaction}“</p>}</div>}
             </div>
           )}
           {error && <p role="alert" className="mt-3 text-sm font-bold text-rose-600 dark:text-rose-300">{error}</p>}
@@ -3216,26 +3218,44 @@ function HomePanel({ sendDailyStatus, dailyMoments = [], dailyMomentsLoading, op
 }
 
 function DailyStatusCard({ sendDailyStatus }) {
+  const [selectedStatusId, setSelectedStatusId] = useState('');
+  const [savingStatusId, setSavingStatusId] = useState('');
+
+  async function handleStatusClick(status) {
+    const previous = selectedStatusId;
+    setSelectedStatusId(status.id);
+    setSavingStatusId(status.id);
+    const saved = await sendDailyStatus?.(status);
+    setSavingStatusId('');
+    if (saved === false) setSelectedStatusId(previous);
+  }
+
   return (
     <Card className="bg-gradient-to-br from-white/90 to-rose-50/90 dark:from-white/[0.08] dark:to-pink-500/[0.08]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="text-pink-500" /> Jak na tom dnes jsem</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Rychlý status bez dlouhého vysvětlování. Partner/ka dostane jasný signál.</p>
+          <h3 className="flex items-center gap-2 text-xl font-black"><ShieldCheck className="text-pink-500" /> Co si dnes přeješ?</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-300">Vyber jednu možnost. Partner/ka ji uvidí jako tvoje dnešní přání.</p>
         </div>
-        <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-black text-pink-700 dark:bg-pink-500/20 dark:text-pink-100">1 klepnutí</span>
+        {selectedStatusId && <span className="shrink-0 rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-100">Vybráno</span>}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {dailyStatusOptions.map((status) => (
-          <button
-            key={status.id}
-            type="button"
-            onClick={() => sendDailyStatus?.(status)}
-            className="rounded-2xl border border-pink-100 bg-white/80 p-3 text-left text-sm font-black transition hover:bg-pink-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-          >
-            <span className="mr-2">{status.icon}</span>{status.label}
-          </button>
-        ))}
+        {dailyStatusOptions.map((status) => {
+          const selected = selectedStatusId === status.id;
+          const saving = savingStatusId === status.id;
+          return (
+            <button
+              key={status.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => handleStatusClick(status)}
+              className={`rounded-2xl border p-3 text-left text-sm font-black transition ${selected ? 'border-emerald-400 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-300 dark:border-emerald-300/60 dark:bg-emerald-400/10 dark:text-emerald-100 dark:ring-emerald-300/30' : 'border-pink-100 bg-white/80 hover:bg-pink-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10'}`}
+            >
+              <span className="mr-2">{status.icon}</span>{status.label}
+              {selected && <span className="mt-1 block text-xs font-black text-emerald-600 dark:text-emerald-200">✓ {saving ? 'Ukládám…' : 'Vybráno'}</span>}
+            </button>
+          );
+        })}
       </div>
     </Card>
   );
