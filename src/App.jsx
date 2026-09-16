@@ -109,6 +109,7 @@ const dailyStatusOptions = [
   { id: 'romantic', label: 'Chci romantiku', icon: '🌹', message: 'Dnešní přání: chci romantiku a hezký čas spolu.' },
   { id: 'flirt', label: 'Chci flirt', icon: '🔥', message: 'Dnešní přání: mám chuť flirtovat a hrát si.' },
   { id: 'hard', label: 'Chci to tvrdě', icon: '⚡', message: 'Dnešní přání: mám chuť na intenzivnější a tvrdší chvíle.' },
+  { id: 'talk', label: 'Chci si povídat', icon: '💬', message: 'Dnešní přání: chci si v klidu povídat.' },
   { id: 'quiet', label: 'Dnes chci klid', icon: '🌙', message: 'Dnešní přání: dnes chci klid, jemnost a žádný tlak.' },
 ];
 
